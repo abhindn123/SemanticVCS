@@ -10,14 +10,12 @@ import secrets
 from datetime import datetime
 from uuid import uuid4
 
-from passlib.context import CryptContext
+import bcrypt
 from supabase import create_client, Client
 
 from app.config import get_settings
 
 logger = logging.getLogger(__name__)
-
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 
 class SupabaseService:
@@ -33,7 +31,7 @@ class SupabaseService:
         """Register a new user and generate API key."""
         user_id = str(uuid4())
         api_key = f"{self.settings.API_KEY_PREFIX}{secrets.token_urlsafe(32)}"
-        password_hash = pwd_context.hash(password)
+        password_hash = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
 
         result = self.client.table("users").insert({
             "id": user_id,
@@ -53,7 +51,7 @@ class SupabaseService:
             return None
 
         user = result.data[0]
-        if not pwd_context.verify(password, user["password_hash"]):
+        if not bcrypt.checkpw(password.encode('utf-8'), user["password_hash"].encode('utf-8')):
             return None
 
         return {"user_id": user["id"], "api_key": user["api_key"], "email": user["email"]}
