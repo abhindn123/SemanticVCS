@@ -18,8 +18,8 @@ RUN pip install --no-cache-dir torch --index-url https://download.pytorch.org/wh
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy application code
 COPY app/ ./app/
+COPY run.py .
 
 # Create non-root user for security
 RUN useradd -m -r appuser
@@ -28,5 +28,5 @@ USER appuser
 # Expose port
 EXPOSE 8000
 
-# Run with gunicorn + uvicorn workers
-CMD ["sh", "-c", "gunicorn app.main:app -w 1 -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:${PORT:-8000} --timeout 300 --access-logfile - --error-logfile -"]
+# Run with python script to handle dynamic PORT binding
+CMD ["python", "run.py"]
