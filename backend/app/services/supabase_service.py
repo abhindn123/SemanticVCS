@@ -193,10 +193,10 @@ class SupabaseService:
             "id", count="exact"
         ).eq("repo_id", repo_db_id).execute()
 
-        # Count warnings by risk level
+        # Count warnings by risk level for this repo
         warnings = self.client.table("warnings").select(
-            "risk_level, file_path"
-        ).execute()
+            "risk_level, file_path, commits!inner(repo_id)"
+        ).eq("commits.repo_id", repo_db_id).execute()
 
         by_risk = {"HIGH": 0, "MEDIUM": 0, "LOW": 0}
         file_counts: dict[str, int] = {}
