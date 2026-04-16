@@ -12,7 +12,6 @@ import time
 from uuid import uuid4
 
 from fastapi import APIRouter, HTTPException, Request, status
-from fastapi.responses import JSONResponse
 
 from app.api.deps import CurrentUser, QdrantDep, RedisDep, SupabaseDep
 from app.config import get_settings
@@ -53,8 +52,7 @@ async def analyze_commit(
     7. Store commit + warnings in PostgreSQL
     8. Return warnings to the extension
     """
-    try:
-        start_time = time.time()
+    start_time = time.time()
     settings = get_settings()
 
     # Verify model is loaded
@@ -224,6 +222,3 @@ async def analyze_commit(
         functions_stored=functions_stored,
         processing_time_ms=processing_time,
     )
-    except Exception as e:
-        import traceback
-        return JSONResponse(status_code=500, content={"error": str(e), "trace": traceback.format_exc()})
