@@ -29,5 +29,4 @@ USER appuser
 EXPOSE 8000
 
 # Run with gunicorn + uvicorn workers
-# Use shell form so $PORT env var gets expanded (Railway sets PORT at runtime)
-CMD gunicorn app.main:app -w 1 -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:${PORT:-8000} --timeout 300 --access-logfile - --error-logfile -
+CMD ["sh", "-c", "gunicorn app.main:app -w 1 -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:${PORT:-8000} --timeout 300 --access-logfile - --error-logfile -"]
