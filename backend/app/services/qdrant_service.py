@@ -45,6 +45,12 @@ class QdrantService:
                     distance=Distance.COSINE,
                 ),
             )
+            # IMPORTANT: Create index for repo_id because Qdrant Cloud requires payload indexing for filtering
+            await self.client.create_payload_index(
+                collection_name=self.collection_name,
+                field_name="repo_id",
+                field_schema="keyword",
+            )
             logger.info(f"Created Qdrant collection: {self.collection_name}")
         else:
             logger.info(f"Qdrant collection already exists: {self.collection_name}")
