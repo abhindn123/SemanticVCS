@@ -1,0 +1,21 @@
+[project]
+name = "semanticvcs-backend"
+version = "1.0.0"
+description = "SemanticVCS — Semantic memory layer for Git. Backend API server."
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [
+    { name = "Team JUGAADU" },
+    { name = "Kripasindhu Ghosh", email = "ghoshkripa521@gmail.com" },
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W"]

@@ -1,0 +1,46 @@
+# === Python ===
+__pycache__/
+*.py[cod]
+*.so
+*.egg-info/
+dist/
+build/
+*.egg
+
+# === Virtual Environment ===
+backend/venv/
+backend/.venv/
+.venv/
+venv/
+
+# === Environment Variables (SECRETS!) ===
+.env
+*.env.local
+
+# === ML Model (large binary) ===
+backend/model/*.onnx
+backend/model/*.bin
+
+# === Node / Extension ===
+extension/node_modules/
+extension/dist/
+extension/*.vsix
+
+# === IDE ===
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# === OS ===
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# === Test / Temp ===
+backend/test_connections.py
+*.log
+.pytest_cache/
+htmlcov/
+.coverage

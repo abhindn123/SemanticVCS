@@ -1,0 +1,108 @@
+{
+  "name": "semanticvcs",
+  "displayName": "SemanticVCS — Codebase Memory",
+  "description": "Warns you when your code is semantically similar to past commits that were reverted or caused bugs. A semantic memory layer for Git.",
+  "version": "1.0.0",
+  "publisher": "jugaadu",
+  "license": "MIT",
+  "icon": "media/icon.png",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jugaadu/semanticvcs"
+  },
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other",
+    "SCM Providers"
+  ],
+  "keywords": [
+    "git",
+    "semantic",
+    "code review",
+    "AI",
+    "vector search",
+    "codebase memory",
+    "UniXCoder"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "semanticvcs.analyze",
+        "title": "SemanticVCS: Analyze Current Commit",
+        "icon": "$(shield)"
+      },
+      {
+        "command": "semanticvcs.dashboard",
+        "title": "SemanticVCS: Open Dashboard",
+        "icon": "$(graph)"
+      },
+      {
+        "command": "semanticvcs.setApiKey",
+        "title": "SemanticVCS: Set API Key",
+        "icon": "$(key)"
+      },
+      {
+        "command": "semanticvcs.init",
+        "title": "SemanticVCS: Initialize Repository"
+      }
+    ],
+    "configuration": {
+      "title": "SemanticVCS",
+      "properties": {
+        "semanticvcs.apiUrl": {
+          "type": "string",
+          "default": "https://semanticvcs-api.up.railway.app",
+          "description": "SemanticVCS backend API URL"
+        },
+        "semanticvcs.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable automatic analysis on each commit"
+        },
+        "semanticvcs.threshold": {
+          "type": "number",
+          "default": 0.80,
+          "minimum": 0.5,
+          "maximum": 1.0,
+          "description": "Minimum similarity threshold for triggering warnings (0.5 - 1.0)"
+        },
+        "semanticvcs.showInlineWarnings": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show inline diagnostic warnings in the editor"
+        },
+        "semanticvcs.showNotifications": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show pop-up notifications for high-risk warnings"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "node esbuild.js --production",
+    "watch": "node esbuild.js --watch",
+    "lint": "eslint src --ext ts",
+    "test": "vscode-test",
+    "package": "vsce package",
+    "publish": "vsce publish"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "@types/vscode": "^1.85.0",
+    "@vscode/test-cli": "^0.0.6",
+    "@vscode/test-electron": "^2.3.8",
+    "@vscode/vsce": "^3.0.0",
+    "esbuild": "^0.24.0",
+    "eslint": "^9.0.0",
+    "typescript": "^5.3.0"
+  },
+  "dependencies": {}
+}
