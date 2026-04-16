@@ -8,6 +8,7 @@ for a repository.
 import logging
 
 from fastapi import APIRouter, Query
+from fastapi.responses import JSONResponse
 
 from app.api.deps import CurrentUser, SupabaseDep
 from app.models.schemas import HistoryStatsResponse, WarningHistoryResponse
@@ -53,8 +54,12 @@ async def get_warning_stats(
     Returns total commits, warning counts by risk level,
     top risky files, and duplicate cluster count.
     """
-    # First get the repo DB id
-    repo = await supabase.get_or_create_repo(user["id"], repo_id)
-    stats = await supabase.get_warning_stats(repo["id"])
+    try:
+        # First get the repo DB id
+        repo = await supabase.get_or_create_repo(user["id"], repo_id)
+        stats = await supabase.get_warning_stats(repo["id"])
 
-    return HistoryStatsResponse(**stats)
+        return HistoryStatsResponse(**stats)
+    except Exception as e:
+        import traceback
+        return JSONResponse(status_code=500, content={"error": str(e), "trace": traceback.format_exc()})
