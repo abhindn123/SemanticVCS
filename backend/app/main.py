@@ -136,6 +136,21 @@ from app.api.routes.analyze import router as analyze_router
 app.include_router(analyze_router)
 
 
+from fastapi.responses import JSONResponse
+import traceback
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    logger.error(f"Global unhandled exception: {exc}")
+    # Return stack trace during development to debug 500 errors
+    trace = traceback.format_exc()
+    logger.error(trace)
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "Internal Server Error", "trace": trace, "error": str(exc)}
+    )
+
+
 @app.get("/", tags=["Root"])
 async def root():
     """API root — returns basic info."""
