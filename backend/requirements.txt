@@ -7,10 +7,8 @@ pydantic-settings==2.7.0
 python-multipart==0.0.19
 
 # === ML / Embedding ===
-onnxruntime==1.20.1
+# torch is installed separately in Dockerfile (CPU-only)
 transformers==4.47.1
-numpy==1.26.4
-tokenizers==0.21.0
 
 # === AST Parsing ===
 tree-sitter==0.24.0

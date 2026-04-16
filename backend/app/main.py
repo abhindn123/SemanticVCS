@@ -81,11 +81,11 @@ async def lifespan(app: FastAPI):
     # === 4. Load UniXCoder Model ===
     try:
         from app.core.embedder import CodeEmbedder
-        embedder = CodeEmbedder(settings.MODEL_PATH, settings.TOKENIZER_NAME)
+        embedder = CodeEmbedder(settings.TOKENIZER_NAME)
         app.state.embedder = embedder
-        logger.info(f"✅ UniXCoder model loaded from {settings.MODEL_PATH}")
+        logger.info("UniXCoder model loaded successfully")
     except Exception as e:
-        logger.warning(f"⚠️ Could not load UniXCoder model: {e}")
+        logger.warning(f"Could not load UniXCoder model: {e}")
         logger.warning("   The /analyze endpoint will not work until the model is loaded.")
         app.state.embedder = None
 

@@ -1,66 +1,58 @@
 """
-Code Embedder — UniXCoder ONNX Runtime Inference.
+Code Embedder — UniXCoder Embedding via Transformers.
 
 Converts function-level code into 768-dimensional embedding vectors
-using the UniXCoder model from Microsoft, optimized via ONNX Runtime.
+using the UniXCoder model from Microsoft.
+Downloads the model automatically on first use.
 """
 
 import hashlib
 import logging
+import os
 
 import numpy as np
-import onnxruntime as ort
-from transformers import RobertaTokenizer
+from transformers import AutoTokenizer, AutoModel
+import torch
 
 logger = logging.getLogger(__name__)
 
 
 class CodeEmbedder:
     """
-    Embeds code into 768-dimensional vectors using UniXCoder (ONNX).
+    Embeds code into 768-dimensional vectors using UniXCoder.
 
     UniXCoder is a unified cross-modal pre-trained model for code
     that understands both code structure and natural language.
     """
 
-    def __init__(self, model_path: str, tokenizer_name: str = "microsoft/unixcoder-base"):
+    def __init__(self, model_name: str = "microsoft/unixcoder-base", **kwargs):
         """
-        Initialize the embedder.
+        Initialize the embedder. Downloads model from HuggingFace on first use.
 
         Args:
-            model_path: Path to the ONNX model file
-            tokenizer_name: HuggingFace tokenizer name
+            model_name: HuggingFace model name
         """
-        logger.info(f"Loading UniXCoder ONNX model from: {model_path}")
+        logger.info(f"Loading UniXCoder model: {model_name}")
 
-        # Session options for optimized inference
-        sess_options = ort.SessionOptions()
-        sess_options.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
-        sess_options.intra_op_num_threads = 4
-        sess_options.inter_op_num_threads = 1
-        sess_options.execution_mode = ort.ExecutionMode.ORT_SEQUENTIAL
+        cache_dir = os.environ.get("HF_HOME", "/tmp/hf_cache")
 
-        # Load ONNX model
-        self.session = ort.InferenceSession(
-            model_path,
-            sess_options,
-            providers=["CPUExecutionProvider"],
+        self.tokenizer = AutoTokenizer.from_pretrained(
+            model_name, cache_dir=cache_dir
         )
+        self.model = AutoModel.from_pretrained(
+            model_name, cache_dir=cache_dir
+        )
+        self.model.eval()
 
-        # Load tokenizer
-        logger.info(f"Loading tokenizer: {tokenizer_name}")
-        self.tokenizer = RobertaTokenizer.from_pretrained(tokenizer_name)
-
-        # Get model input/output names
-        self.input_names = [inp.name for inp in self.session.get_inputs()]
-        self.output_names = [out.name for out in self.session.get_outputs()]
+        # Move to CPU explicitly (no GPU on free tier)
+        self.device = torch.device("cpu")
+        self.model.to(self.device)
 
         self.max_length = 512
         self.embedding_dim = 768
 
         logger.info(
-            f"UniXCoder loaded — inputs: {self.input_names}, "
-            f"outputs: {self.output_names}, "
+            f"UniXCoder loaded — device: {self.device}, "
             f"max_length: {self.max_length}"
         )
 
@@ -77,44 +69,31 @@ class CodeEmbedder:
         # Tokenize
         inputs = self.tokenizer(
             code,
-            return_tensors="np",
+            return_tensors="pt",
             max_length=self.max_length,
             truncation=True,
             padding="max_length",
-        )
+        ).to(self.device)
 
-        # Prepare ONNX inputs
-        onnx_inputs = {}
-        if "input_ids" in self.input_names:
-            onnx_inputs["input_ids"] = inputs["input_ids"].astype(np.int64)
-        if "attention_mask" in self.input_names:
-            onnx_inputs["attention_mask"] = inputs["attention_mask"].astype(np.int64)
-
-        # Run inference
-        outputs = self.session.run(self.output_names, onnx_inputs)
+        # Run inference (no gradient computation)
+        with torch.no_grad():
+            outputs = self.model(**inputs)
 
         # Mean pooling over token dimension
-        # outputs[0] shape: (1, seq_len, 768)
-        token_embeddings = outputs[0]
-        attention_mask = inputs["attention_mask"]
+        token_embeddings = outputs.last_hidden_state  # (1, seq_len, 768)
+        attention_mask = inputs["attention_mask"].unsqueeze(-1).float()  # (1, seq_len, 1)
 
-        # Expand attention mask for broadcasting: (1, seq_len) → (1, seq_len, 1)
-        mask_expanded = np.expand_dims(attention_mask, axis=-1).astype(np.float32)
+        masked_embeddings = token_embeddings * attention_mask
+        sum_embeddings = masked_embeddings.sum(dim=1)  # (1, 768)
+        sum_mask = attention_mask.sum(dim=1)  # (1, 1)
+        sum_mask = torch.clamp(sum_mask, min=1e-9)
 
-        # Mask padding tokens and compute mean
-        masked_embeddings = token_embeddings * mask_expanded
-        sum_embeddings = masked_embeddings.sum(axis=1)  # (1, 768)
-        sum_mask = mask_expanded.sum(axis=1)  # (1, 1)
-        sum_mask = np.maximum(sum_mask, 1e-9)  # Avoid division by zero
-
-        embedding = (sum_embeddings / sum_mask)[0]  # (768,)
+        embedding = (sum_embeddings / sum_mask).squeeze(0)  # (768,)
 
         # L2 normalize
-        norm = np.linalg.norm(embedding)
-        if norm > 0:
-            embedding = embedding / norm
+        embedding = torch.nn.functional.normalize(embedding, p=2, dim=0)
 
-        return embedding
+        return embedding.cpu().numpy()
 
     def embed_batch(self, codes: list[str]) -> list[np.ndarray]:
         """
