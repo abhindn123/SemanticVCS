@@ -136,6 +136,7 @@ from app.api.routes.analyze import router as analyze_router
 app.include_router(analyze_router)
 
 
+from fastapi import Request
 from fastapi.responses import JSONResponse
 import traceback
 
