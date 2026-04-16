@@ -18,7 +18,7 @@ export class ApiClient {
   /** Get the configured API URL from settings */
   private getBaseUrl(): string {
     const config = vscode.workspace.getConfiguration("semanticvcs");
-    return config.get<string>("apiUrl", "https://semanticvcs-api.up.railway.app");
+    return config.get<string>("apiUrl", "https://semanticvcs-production.up.railway.app");
   }
 
   /** Get stored API key from VS Code SecretStorage */
