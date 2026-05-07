@@ -126,11 +126,14 @@ export class GitWatcher implements vscode.Disposable {
 
       log(`Sending ${diffs.length} file(s) to backend for analysis...`);
 
-      // Step 2: Send to backend
+      // Step 2: Detect if this is a revert commit
       const repoId = await getRepoId(repoPath);
       const author = await getAuthor(repoPath);
       const message = await getCommitMessage(repoPath);
 
+      await this.detectAndMarkRevert(repoPath, message);
+
+      // Step 3: Send to backend
       const result = await this.apiClient.analyze({
         repo_id: repoId,
         commit_sha: commitSha,
@@ -228,6 +231,65 @@ export class GitWatcher implements vscode.Disposable {
       logError("Health check failed", error);
       vscode.window.showErrorMessage("Could not connect to SemanticVCS backend. Check your API URL and key.");
     }
+  }
+
+  /**
+   * Detect if a commit message indicates a revert, and auto-mark the original.
+   */
+  private async detectAndMarkRevert(repoPath: string, message: string): Promise<void> {
+    // Pattern 1: Revert "original message"
+    const revertMsgMatch = message.match(/^Revert "(.+)"/i);
+    // Pattern 2: This reverts commit <sha>
+    const revertShaMatch = message.match(/This reverts commit ([a-f0-9]{7,40})/i);
+
+    let revertedSha: string | undefined;
+
+    if (revertShaMatch) {
+      revertedSha = revertShaMatch[1];
+      log(`🔄 Detected revert of commit SHA: ${revertedSha.slice(0, 7)}`);
+    } else if (revertMsgMatch) {
+      // Find the original commit by message
+      const originalMsg = revertMsgMatch[1];
+      try {
+        const result = await this.execGit(repoPath, `log --format=%H --grep="${originalMsg}" -1`);
+        revertedSha = result.trim();
+        if (revertedSha) {
+          log(`🔄 Detected revert of "${originalMsg}" → ${revertedSha.slice(0, 7)}`);
+        }
+      } catch {
+        log(`Could not find original commit for revert message: "${originalMsg}"`);
+      }
+    }
+
+    if (revertedSha) {
+      try {
+        const repoId = await this.execGit(repoPath, "config --get remote.origin.url").catch(() => "");
+        await this.apiClient.markRevert({
+          repo_id: repoId.trim() || require("path").basename(repoPath),
+          commit_sha: revertedSha,
+          reason: `Auto-detected from commit message: "${message}"`,
+        });
+        log(`✅ Marked ${revertedSha.slice(0, 7)} as reverted via webhook`);
+
+        vscode.window.showInformationMessage(
+          `SemanticVCS: Auto-detected revert — commit ${revertedSha.slice(0, 7)} marked as reverted`
+        );
+      } catch (error) {
+        logError("Failed to mark revert via webhook", error);
+      }
+    }
+  }
+
+  private execGit(repoPath: string, args: string): Promise<string> {
+    return new Promise((resolve, reject) => {
+      require("child_process").exec(
+        `git ${args}`,
+        { cwd: repoPath },
+        (err: Error | null, stdout: string) => {
+          if (err) { reject(err); } else { resolve(stdout); }
+        }
+      );
+    });
   }
 
   dispose(): void {

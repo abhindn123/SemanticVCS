@@ -134,8 +134,10 @@ app.include_router(history_router)
 
 from app.api.routes.analyze import router as analyze_router
 from app.api.routes.backfill import router as backfill_router
+from app.api.routes.webhooks import router as webhooks_router
 app.include_router(analyze_router)
 app.include_router(backfill_router)
+app.include_router(webhooks_router)
 
 
 from fastapi import Request

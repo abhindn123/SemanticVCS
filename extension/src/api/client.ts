@@ -140,6 +140,11 @@ export class ApiClient {
     return this.request<BackfillResponse>("POST", "/api/v1/backfill", payload, 1);
   }
 
+  /** POST /api/v1/webhook/revert — Mark a commit as reverted */
+  async markRevert(payload: { repo_id: string; commit_sha: string; reason: string }): Promise<any> {
+    return this.request("POST", "/api/v1/webhook/revert", payload, 1);
+  }
+
   /** Check if API key is configured */
   async hasApiKey(): Promise<boolean> {
     const key = await this.getApiKey();
