@@ -54,18 +54,44 @@ export class GitWatcher implements vscode.Disposable {
       return;
     }
 
-    const git = gitExtension.isActive ? gitExtension.exports.getAPI(1) : undefined;
+    // Wait for git extension to activate if needed
+    if (!gitExtension.isActive) {
+      await gitExtension.activate();
+    }
+
+    const git = gitExtension.exports.getAPI(1);
     if (!git) {
       logWarning("Git API not available");
       return;
     }
 
-    if (git.repositories.length === 0) {
-      log("No Git repositories found in workspace");
+    // Retry finding repos — VS Code Git extension discovers them async
+    let repo: GitRepository | undefined;
+    for (let attempt = 0; attempt < 10; attempt++) {
+      if (git.repositories.length > 0) {
+        repo = git.repositories[0] as unknown as GitRepository;
+        break;
+      }
+      log(`Waiting for Git repository to be discovered... (attempt ${attempt + 1}/10)`);
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+    }
+
+    // If still not found, listen for when one gets added
+    if (!repo) {
+      log("No Git repositories found yet — will listen for new repos");
+      const onNewRepo = git.onDidOpenRepository(async (newRepo: any) => {
+        log(`Repository discovered: ${newRepo.rootUri.fsPath}`);
+        onNewRepo.dispose();
+        await this.watchRepo(newRepo as unknown as GitRepository);
+      });
+      this.disposables.push(onNewRepo);
       return;
     }
 
-    const repo = git.repositories[0];
+    await this.watchRepo(repo);
+  }
+
+  private async watchRepo(repo: GitRepository): Promise<void> {
     this.lastHead = repo.state.HEAD?.commit;
 
     log(`Watching repository: ${repo.rootUri.fsPath}`);
