@@ -114,28 +114,52 @@ export function activate(context: vscode.ExtensionContext) {
 
       // Handle button clicks from the webview
       panel.webview.onDidReceiveMessage(
-        (message) => {
+        async (message) => {
           if (message.command === "continue") {
             log(`User chose to CONTINUE despite warning for ${message.functionName}`);
             vscode.window.showInformationMessage(`SemanticVCS: Continuing with ${message.functionName} — be careful!`);
             panel.dispose();
           } else if (message.command === "fix") {
             log(`User chose to FIX ${message.functionName}`);
-            vscode.window.showInformationMessage(`SemanticVCS: Opening ${message.filePath} — apply the suggested fix`);
-            // Open the file at the warning line
-            const uri = vscode.Uri.file(
-              require("path").join(
-                vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || "",
-                message.filePath
-              )
-            );
-            vscode.window.showTextDocument(uri, {
-              selection: new vscode.Range(
-                new vscode.Position(Math.max(0, message.startLine - 1), 0),
-                new vscode.Position(Math.max(0, message.endLine - 1), 999)
-              ),
-            });
             panel.dispose();
+
+            const repoPath = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || "";
+            const filePath = message.filePath;
+
+            // Restore the previous version of the file
+            const cp = require("child_process");
+            try {
+              cp.execSync(`git checkout HEAD~1 -- "${filePath}"`, { cwd: repoPath });
+              log(`Restored ${filePath} from previous commit`);
+
+              // Open the restored file
+              const uri = vscode.Uri.file(require("path").join(repoPath, filePath));
+              await vscode.window.showTextDocument(uri, {
+                selection: new vscode.Range(
+                  new vscode.Position(Math.max(0, message.startLine - 1), 0),
+                  new vscode.Position(Math.max(0, message.endLine - 1), 999)
+                ),
+              });
+
+              const action = await vscode.window.showInformationMessage(
+                `✅ SemanticVCS restored ${filePath} to the safe version. Review and commit when ready.`,
+                "Stage & Commit Fix",
+                "Just Review"
+              );
+
+              if (action === "Stage & Commit Fix") {
+                cp.execSync(`git add "${filePath}"`, { cwd: repoPath });
+                cp.execSync(`git commit -m "fix: restore safe version of ${message.functionName} (SemanticVCS)"`, { cwd: repoPath });
+                vscode.window.showInformationMessage("✅ Fix committed!");
+                log(`Auto-committed fix for ${filePath}`);
+              }
+            } catch (err: any) {
+              log(`Git restore failed: ${err.message}`);
+              vscode.window.showErrorMessage(`Could not restore file: ${err.message}`);
+              // Fallback: just open the file
+              const uri = vscode.Uri.file(require("path").join(repoPath, filePath));
+              vscode.window.showTextDocument(uri);
+            }
           }
         },
         undefined,
