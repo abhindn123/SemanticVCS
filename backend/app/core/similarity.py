@@ -83,17 +83,17 @@ async def search_similar_functions(
         if exclude_commit_sha and commit_sha == exclude_commit_sha:
             continue
 
-        # Determine outcome
-        revert_status = match.get("revert_status", False)
-        bug_ids = match.get("bug_ids", [])
-        outcome = determine_outcome(revert_status, bug_ids)
-
-        # Get additional commit info from PostgreSQL
+        # Get commit info from PostgreSQL (source of truth for revert_status)
         commit_info = await supabase.get_commit_by_sha(commit_sha)
         author = match.get("author", "")
         timestamp = None
 
+        # Determine outcome from Supabase (where seed_bad_outcome updates revert_status)
+        revert_status = False
+        bug_ids = []
         if commit_info:
+            revert_status = commit_info.get("revert_status", False)
+            bug_ids = commit_info.get("bug_ids") or []
             author = commit_info.get("author", author)
             ts = commit_info.get("timestamp")
             if ts:
@@ -102,10 +102,16 @@ async def search_similar_functions(
                 except (ValueError, TypeError):
                     pass
 
+        outcome = determine_outcome(revert_status, bug_ids)
+
         # Calculate risk score
         similarity = match["score"]
         outcome_weight = OUTCOME_WEIGHTS.get(outcome, 0.3)
         risk_score = similarity * outcome_weight
+        logger.info(
+            f"Match: {commit_sha[:7]} | sim={similarity:.4f} | "
+            f"revert={revert_status} | outcome={outcome.value} | risk={risk_score:.4f}"
+        )
 
         matches.append(SimilarityMatch(
             score=round(similarity, 4),
