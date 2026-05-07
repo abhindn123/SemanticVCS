@@ -57,7 +57,7 @@
       "properties": {
         "semanticvcs.apiUrl": {
           "type": "string",
-          "default": "https://semanticvcs-api.up.railway.app",
+          "default": "https://semanticvcs-production.up.railway.app",
           "description": "SemanticVCS backend API URL"
         },
         "semanticvcs.enabled": {
