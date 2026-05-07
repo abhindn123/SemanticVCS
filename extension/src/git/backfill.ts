@@ -94,9 +94,9 @@ async function getCommitDiff(
   const diffs: { file_path: string; language: string; diff: string; file_content: string }[] = [];
 
   try {
-    // Get changed files
+    // Get changed files (--root handles the first commit in repo)
     const changedFiles = (
-      await execGit(repoPath, `diff-tree --no-commit-id --name-only -r ${sha}`)
+      await execGit(repoPath, `diff-tree --root --no-commit-id --name-only -r ${sha}`)
     )
       .trim()
       .split("\n")
@@ -110,6 +110,7 @@ async function getCommitDiff(
       }
 
       try {
+        // Try normal diff first (works for non-root commits)
         const diff = await execGit(repoPath, `diff ${sha}~1 ${sha} -- "${filePath}"`);
         const fileContent = await execGit(repoPath, `show ${sha}:"${filePath}"`);
 
@@ -117,22 +118,23 @@ async function getCommitDiff(
           diffs.push({ file_path: filePath, language, diff, file_content });
         }
       } catch {
-        // File might not exist at this commit (new file on first commit)
+        // Root commit or file doesn't exist in parent — generate a synthetic diff
         try {
           const fileContent = await execGit(repoPath, `show ${sha}:"${filePath}"`);
           if (fileContent) {
+            const lines = fileContent.split("\n");
             const fakeDiff =
-              `@@ -0,0 +1,${fileContent.split("\n").length} @@\n` +
-              fileContent.split("\n").map((l) => `+${l}`).join("\n");
+              `@@ -0,0 +1,${lines.length} @@\n` +
+              lines.map((l) => `+${l}`).join("\n");
             diffs.push({ file_path: filePath, language, diff: fakeDiff, file_content });
           }
         } catch {
-          // Skip completely unreachable files
+          // Skip unreachable files
         }
       }
     }
-  } catch {
-    // Commit might be the root commit (no parent)
+  } catch (err: any) {
+    log(`diff-tree failed for ${sha.slice(0, 7)}: ${err.message}`);
   }
 
   return diffs;
