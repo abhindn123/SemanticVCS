@@ -5,7 +5,7 @@
  */
 
 import * as vscode from "vscode";
-import { AnalyzeRequest, AnalyzeResponse, AuthResponse, HealthResponse, HistoryStats } from "./types";
+import { AnalyzeRequest, AnalyzeResponse, AuthResponse, BackfillRequest, BackfillResponse, HealthResponse, HistoryStats } from "./types";
 
 export class ApiClient {
   private context: vscode.ExtensionContext;
@@ -133,6 +133,11 @@ export class ApiClient {
   /** GET /api/v1/history/{repo_id}/stats — Get warning stats */
   async getStats(repoId: string): Promise<HistoryStats> {
     return this.request<HistoryStats>("GET", `/api/v1/history/${encodeURIComponent(repoId)}/stats`);
+  }
+
+  /** POST /api/v1/backfill — Backfill historical commits */
+  async backfill(payload: BackfillRequest): Promise<BackfillResponse> {
+    return this.request<BackfillResponse>("POST", "/api/v1/backfill", payload, 1);
   }
 
   /** Check if API key is configured */

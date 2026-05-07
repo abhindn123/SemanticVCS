@@ -50,6 +50,11 @@
       {
         "command": "semanticvcs.init",
         "title": "SemanticVCS: Initialize Repository"
+      },
+      {
+        "command": "semanticvcs.backfill",
+        "title": "SemanticVCS: Backfill Repository History",
+        "icon": "$(history)"
       }
     ],
     "configuration": {

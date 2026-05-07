@@ -15,6 +15,7 @@ import { GitWatcher } from "./git/watcher";
 import { DiagnosticsManager } from "./ui/diagnostics";
 import { StatusBarManager } from "./ui/statusBar";
 import { HoverProvider } from "./ui/hoverProvider";
+import { runBackfill } from "./git/backfill";
 import { log, logError } from "./utils/logger";
 
 export function activate(context: vscode.ExtensionContext) {
@@ -81,6 +82,19 @@ export function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(
     vscode.commands.registerCommand("semanticvcs.init", async () => {
       await gitWatcher.initRepo();
+    })
+  );
+
+  // Backfill repository history
+  context.subscriptions.push(
+    vscode.commands.registerCommand("semanticvcs.backfill", async () => {
+      log("Backfill command triggered");
+      const repoPath = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+      if (!repoPath) {
+        vscode.window.showErrorMessage("No workspace folder open");
+        return;
+      }
+      await runBackfill(apiClient, repoPath);
     })
   );
 

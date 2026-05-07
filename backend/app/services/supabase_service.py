@@ -121,6 +121,16 @@ class SupabaseService:
         result = self.client.table("commits").select("*").eq("sha", sha).execute()
         return result.data[0] if result.data else None
 
+    async def mark_commit_reverted(self, sha: str) -> int:
+        """Mark all commits with this SHA as reverted. Returns count updated."""
+        result = self.client.table("commits").update(
+            {"revert_status": True}
+        ).eq("sha", sha).execute()
+        count = len(result.data) if result.data else 0
+        if count > 0:
+            logger.info(f"Marked commit {sha[:7]} as REVERTED ({count} rows)")
+        return count
+
     # === Warnings ===
 
     async def store_warning(

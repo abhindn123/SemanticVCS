@@ -133,7 +133,9 @@ app.include_router(auth_router)
 app.include_router(history_router)
 
 from app.api.routes.analyze import router as analyze_router
+from app.api.routes.backfill import router as backfill_router
 app.include_router(analyze_router)
+app.include_router(backfill_router)
 
 
 from fastapi import Request

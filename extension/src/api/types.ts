@@ -69,3 +69,23 @@ export interface HistoryStats {
   top_risky_files: string[];
   duplicate_clusters: number;
 }
+
+export interface BackfillCommit {
+  sha: string;
+  message: string;
+  author: string;
+  diffs: FileDiff[];
+}
+
+export interface BackfillRequest {
+  repo_id: string;
+  commits: BackfillCommit[];
+}
+
+export interface BackfillResponse {
+  commits_processed: number;
+  functions_embedded: number;
+  reverts_detected: number;
+  skipped: number;
+  processing_time_ms: number;
+}

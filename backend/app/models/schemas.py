@@ -55,6 +55,29 @@ class LoginRequest(BaseModel):
     password: str
 
 
+class BackfillCommit(BaseModel):
+    """A single commit from git history for backfill processing."""
+    sha: str = Field(..., description="Full commit SHA")
+    message: str = Field("", description="Commit message (used for revert detection)")
+    author: str = Field("", description="Author email")
+    diffs: list[FileDiff] = Field(default_factory=list, description="File diffs for this commit")
+
+
+class BackfillRequest(BaseModel):
+    """Request body for POST /api/v1/backfill."""
+    repo_id: str = Field(..., description="Repository identifier")
+    commits: list[BackfillCommit] = Field(..., description="Historical commits to process")
+
+
+class BackfillResponse(BaseModel):
+    """Response for POST /api/v1/backfill."""
+    commits_processed: int = 0
+    functions_embedded: int = 0
+    reverts_detected: int = 0
+    skipped: int = 0
+    processing_time_ms: int = 0
+
+
 # === Response Schemas ===
 
 class Warning(BaseModel):

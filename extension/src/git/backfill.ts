@@ -1,0 +1,255 @@
+/**
+ * Git History Backfill — Walks git log and sends historical commits to backend.
+ *
+ * Extracts diffs for each historical commit and sends them in batches
+ * to the /api/v1/backfill endpoint for embedding and revert detection.
+ */
+
+import * as vscode from "vscode";
+import * as cp from "child_process";
+import * as path from "path";
+import { ApiClient } from "../api/client";
+import { BackfillCommit } from "../api/types";
+import { log, logError } from "../utils/logger";
+
+const BATCH_SIZE = 5; // Commits per API call
+const MAX_COMMITS = 200; // Max commits to backfill
+
+const LANGUAGE_MAP: Record<string, string> = {
+  ".py": "python",
+  ".js": "javascript",
+  ".jsx": "javascript",
+  ".ts": "typescript",
+  ".tsx": "typescript",
+  ".mjs": "javascript",
+  ".cjs": "javascript",
+};
+
+function execGit(repoPath: string, args: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    cp.exec(
+      `git ${args}`,
+      { cwd: repoPath, maxBuffer: 20 * 1024 * 1024 },
+      (error, stdout, stderr) => {
+        if (error) {
+          reject(new Error(stderr || error.message));
+        } else {
+          resolve(stdout);
+        }
+      }
+    );
+  });
+}
+
+/**
+ * Get the repo ID (same logic as diffParser).
+ */
+async function getRepoId(repoPath: string): Promise<string> {
+  try {
+    const remoteUrl = (await execGit(repoPath, "config --get remote.origin.url")).trim();
+    return remoteUrl
+      .replace(/^git@/, "")
+      .replace(/^https?:\/\//, "")
+      .replace(":", "/")
+      .replace(/\.git$/, "");
+  } catch {
+    return path.basename(repoPath);
+  }
+}
+
+/**
+ * Get list of commit SHAs and messages from git log.
+ */
+async function getCommitLog(
+  repoPath: string,
+  maxCommits: number
+): Promise<{ sha: string; message: string; author: string }[]> {
+  const output = await execGit(
+    repoPath,
+    `log --format="%H|||%s|||%ae" --max-count=${maxCommits}`
+  );
+
+  return output
+    .trim()
+    .split("\n")
+    .filter((line) => line.length > 0)
+    .map((line) => {
+      const parts = line.split("|||");
+      return {
+        sha: parts[0]?.trim() || "",
+        message: parts[1]?.trim() || "",
+        author: parts[2]?.trim() || "",
+      };
+    })
+    .filter((c) => c.sha.length > 0);
+}
+
+/**
+ * Get the diff for a specific commit.
+ */
+async function getCommitDiff(
+  repoPath: string,
+  sha: string
+): Promise<{ file_path: string; language: string; diff: string; file_content: string }[]> {
+  const diffs: { file_path: string; language: string; diff: string; file_content: string }[] = [];
+
+  try {
+    // Get changed files
+    const changedFiles = (
+      await execGit(repoPath, `diff-tree --no-commit-id --name-only -r ${sha}`)
+    )
+      .trim()
+      .split("\n")
+      .filter((f) => f.length > 0);
+
+    for (const filePath of changedFiles) {
+      const ext = path.extname(filePath);
+      const language = LANGUAGE_MAP[ext];
+      if (!language) {
+        continue;
+      }
+
+      try {
+        const diff = await execGit(repoPath, `diff ${sha}~1 ${sha} -- "${filePath}"`);
+        const fileContent = await execGit(repoPath, `show ${sha}:"${filePath}"`);
+
+        if (diff && fileContent) {
+          diffs.push({ file_path: filePath, language, diff, file_content });
+        }
+      } catch {
+        // File might not exist at this commit (new file on first commit)
+        try {
+          const fileContent = await execGit(repoPath, `show ${sha}:"${filePath}"`);
+          if (fileContent) {
+            const fakeDiff =
+              `@@ -0,0 +1,${fileContent.split("\n").length} @@\n` +
+              fileContent.split("\n").map((l) => `+${l}`).join("\n");
+            diffs.push({ file_path: filePath, language, diff: fakeDiff, file_content });
+          }
+        } catch {
+          // Skip completely unreachable files
+        }
+      }
+    }
+  } catch {
+    // Commit might be the root commit (no parent)
+  }
+
+  return diffs;
+}
+
+/**
+ * Run the full backfill process with a progress bar.
+ */
+export async function runBackfill(
+  apiClient: ApiClient,
+  repoPath: string
+): Promise<void> {
+  log("Starting backfill...");
+
+  // Check API key
+  if (!(await apiClient.hasApiKey())) {
+    await apiClient.promptApiKey();
+    if (!(await apiClient.hasApiKey())) {
+      vscode.window.showErrorMessage("SemanticVCS: API key required for backfill");
+      return;
+    }
+  }
+
+  const repoId = await getRepoId(repoPath);
+
+  await vscode.window.withProgress(
+    {
+      location: vscode.ProgressLocation.Notification,
+      title: "SemanticVCS: Backfilling repository history",
+      cancellable: true,
+    },
+    async (progress, cancelToken) => {
+      // Step 1: Get commit log
+      progress.report({ message: "Reading git history...", increment: 0 });
+      const commits = await getCommitLog(repoPath, MAX_COMMITS);
+
+      if (commits.length === 0) {
+        vscode.window.showInformationMessage("SemanticVCS: No commits found to backfill");
+        return;
+      }
+
+      log(`Found ${commits.length} commits to backfill`);
+      progress.report({
+        message: `Found ${commits.length} commits. Extracting diffs...`,
+        increment: 5,
+      });
+
+      // Step 2: Process in batches
+      let totalProcessed = 0;
+      let totalEmbedded = 0;
+      let totalReverts = 0;
+      const incrementPerBatch = 90 / Math.ceil(commits.length / BATCH_SIZE);
+
+      for (let i = 0; i < commits.length; i += BATCH_SIZE) {
+        if (cancelToken.isCancellationRequested) {
+          log("Backfill cancelled by user");
+          break;
+        }
+
+        const batch = commits.slice(i, i + BATCH_SIZE);
+        const backfillCommits: BackfillCommit[] = [];
+
+        // Extract diffs for each commit in the batch
+        for (const commit of batch) {
+          progress.report({
+            message: `Processing commit ${i + backfillCommits.length + 1}/${commits.length}: ${commit.sha.slice(0, 7)}`,
+          });
+
+          const diffs = await getCommitDiff(repoPath, commit.sha);
+          backfillCommits.push({
+            sha: commit.sha,
+            message: commit.message,
+            author: commit.author,
+            diffs,
+          });
+        }
+
+        // Send batch to backend
+        try {
+          const result = await apiClient.backfill({
+            repo_id: repoId,
+            commits: backfillCommits,
+          });
+
+          totalProcessed += result.commits_processed;
+          totalEmbedded += result.functions_embedded;
+          totalReverts += result.reverts_detected;
+
+          log(
+            `Batch ${Math.floor(i / BATCH_SIZE) + 1}: ` +
+            `${result.commits_processed} processed, ` +
+            `${result.functions_embedded} embedded, ` +
+            `${result.reverts_detected} reverts`
+          );
+        } catch (error) {
+          logError(`Batch failed at commit ${i}`, error);
+          // Continue with next batch instead of stopping entirely
+        }
+
+        progress.report({ increment: incrementPerBatch });
+      }
+
+      // Step 3: Done
+      progress.report({ message: "Backfill complete!", increment: 100 });
+
+      const msg =
+        `✅ SemanticVCS Backfill Complete\n` +
+        `• ${totalProcessed} commits processed\n` +
+        `• ${totalEmbedded} functions embedded\n` +
+        `• ${totalReverts} reverts auto-detected`;
+
+      log(msg);
+      vscode.window.showInformationMessage(
+        `SemanticVCS: Backfilled ${totalProcessed} commits, ` +
+        `${totalEmbedded} functions embedded, ` +
+        `${totalReverts} reverts detected`
+      );
+    }
+  );
+}
