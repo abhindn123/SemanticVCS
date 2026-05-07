@@ -1,0 +1,14 @@
+{
+  "repo_id": "test-shop",
+  "commit_sha": "ef21794",
+  "author": "test@test.com",
+  "message": "test context",
+  "diffs": [
+    {
+      "file_path": "auth.py",
+      "language": "python",
+      "diff": "--- a\n+++ b\n@@ -1,5 +1,2 @@\n-def sanitize_input(data: str) -> str:\n-    if not data:\n-        raise ValueError()\n-    return data.strip()\n+def sanitize_input(data: str) -> str:\n+    return data\n",
+      "file_content": "def sanitize_input(data: str) -> str:\n    return data\n"
+    }
+  ]
+}

@@ -104,6 +104,11 @@ async def search_similar_functions(
 
         outcome = determine_outcome(revert_status, bug_ids)
 
+        # Get commit message
+        commit_message = ""
+        if commit_info:
+            commit_message = commit_info.get("message", "")
+
         # Calculate risk score
         similarity = match["score"]
         outcome_weight = OUTCOME_WEIGHTS.get(outcome, 0.3)
@@ -120,6 +125,7 @@ async def search_similar_functions(
             file_path=match.get("file_path", ""),
             code_body=match.get("code_body", ""),
             author=author,
+            message=commit_message,
             timestamp=timestamp,
             revert_status=revert_status,
             bug_ids=bug_ids,

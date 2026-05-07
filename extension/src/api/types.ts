@@ -32,6 +32,7 @@ export interface Warning {
   matched_commit_sha: string;
   matched_date: string | null;
   matched_author: string;
+  matched_message: string;
   outcome: CommitOutcome;
   explanation: string;
   historical_context: string;

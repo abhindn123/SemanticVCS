@@ -170,6 +170,7 @@ async def analyze_commit(
                     matched_commit_sha=match.commit_sha,
                     matched_date=match.timestamp,
                     matched_author=match.author,
+                    matched_message=match.message,
                     outcome=match.outcome,
                     explanation=risk_explanation["explanation"],
                     historical_context=risk_explanation.get("historical_context", ""),

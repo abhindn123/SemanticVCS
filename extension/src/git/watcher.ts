@@ -147,7 +147,7 @@ export class GitWatcher implements vscode.Disposable {
         `${result.warnings.length} warnings, ${result.processing_time_ms}ms`
       );
 
-      // Step 3: Display results
+      // Step 4: Display results
       if (result.warnings.length > 0) {
         // Set diagnostics (inline squiggles)
         this.diagnostics.setWarnings(result.warnings, repoPath);
@@ -155,20 +155,8 @@ export class GitWatcher implements vscode.Disposable {
         // Update status bar
         this.statusBar.setWarnings(result.warnings.length);
 
-        // Show notification for HIGH risk
-        const showNotifications = config.get<boolean>("showNotifications", true);
-        const highRisk = result.warnings.filter((w) => w.risk_level === "HIGH");
-
-        if (showNotifications && highRisk.length > 0) {
-          const action = await vscode.window.showWarningMessage(
-            `⚠️ SemanticVCS: ${highRisk.length} high-risk match(es) detected!`,
-            "View Details",
-            "Dismiss"
-          );
-          if (action === "View Details") {
-            vscode.commands.executeCommand("semanticvcs.dashboard");
-          }
-        }
+        // Auto-open dashboard with warnings
+        vscode.commands.executeCommand("semanticvcs.showWarnings", result.warnings, repoId);
       } else {
         this.statusBar.setClean();
         this.diagnostics.clear();

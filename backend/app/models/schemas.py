@@ -92,6 +92,7 @@ class Warning(BaseModel):
     matched_commit_sha: str
     matched_date: datetime | None = None
     matched_author: str = ""
+    matched_message: str = Field("", description="Original commit message")
     outcome: CommitOutcome
     explanation: str
     historical_context: str = ""
@@ -173,6 +174,7 @@ class SimilarityMatch(BaseModel):
     file_path: str
     code_body: str = ""
     author: str = ""
+    message: str = ""
     timestamp: datetime | None = None
     revert_status: bool = False
     bug_ids: list[str] = []
