@@ -126,7 +126,14 @@ async def search_similar_functions(
             outcome=outcome,
         ))
 
-    # Step 3: Sort by risk score (similarity × outcome weight)
+    # Step 3: Deduplicate by commit_sha (keep highest score per commit)
+    seen_commits: dict[str, SimilarityMatch] = {}
+    for m in matches:
+        if m.commit_sha not in seen_commits or m.score > seen_commits[m.commit_sha].score:
+            seen_commits[m.commit_sha] = m
+    matches = list(seen_commits.values())
+
+    # Step 4: Sort by risk score (similarity × outcome weight)
     matches.sort(
         key=lambda m: m.score * OUTCOME_WEIGHTS.get(m.outcome, 0.3),
         reverse=True,
