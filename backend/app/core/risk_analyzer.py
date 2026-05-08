@@ -148,3 +148,96 @@ Guidelines for risk_level:
             historical_context=f"The historical code was {outcome}.",
             suggested_action="Review the matched historical commit and verify your changes.",
         )
+
+    async def generate_fix(
+        self,
+        bad_code: str,
+        safe_code: str,
+        explanation: str,
+        function_name: str = "",
+        file_path: str = "",
+        language: str = "python",
+    ) -> dict:
+        """
+        Generate a NEW, smarter fix using Gemini — not a dumb restore.
+
+        Args:
+            bad_code: The risky code the developer just wrote
+            safe_code: The historical safe version (for context)
+            explanation: Why the code was flagged
+            function_name: Name of the function
+            file_path: File path
+            language: Programming language
+
+        Returns:
+            dict with 'fixed_code', 'explanation', and 'changes_made'
+        """
+        prompt = f"""You are a senior developer fixing a security/quality issue in code.
+
+A developer wrote code that was flagged as risky. Your job is to write a NEW, BETTER version
+that fixes the security issue while RESPECTING the developer's intent.
+
+DO NOT just copy the old safe version. Write modern, clean, optimized code.
+
+## Risky Code (what the developer wrote):
+Function: {function_name}
+File: {file_path}
+Language: {language}
+```{language}
+{bad_code[:3000]}
+```
+
+## Why it was flagged:
+{explanation}
+
+## Historical safe version (for reference only — do NOT copy this verbatim):
+```{language}
+{safe_code[:3000]}
+```
+
+Respond with this exact JSON:
+{{
+  "fixed_code": "The complete fixed function code. Must be valid {language}. Include imports if needed.",
+  "explanation": "1-2 sentences explaining what you changed and why.",
+  "changes_made": ["List of specific changes made, e.g. 'Added input validation', 'Used compiled regex for performance'"]
+}}
+
+Rules:
+- The fix must be COMPLETE and ready to paste — include the full function
+- Improve on the old safe version if possible (better patterns, modern syntax)
+- Respect the developer's goal (e.g. if they wanted performance, make it fast AND safe)
+- Use best practices for {language}"""
+
+        try:
+            # Use a slightly higher temperature for creative fixes
+            fix_model = genai.GenerativeModel(
+                self.model.model_name,
+                generation_config=genai.GenerationConfig(
+                    temperature=0.4,
+                    max_output_tokens=2048,
+                    response_mime_type="application/json",
+                ),
+            )
+            response = await fix_model.generate_content_async(prompt)
+            text = response.text.strip()
+            if text.startswith("```"):
+                text = text.split("\n", 1)[1]
+            if text.endswith("```"):
+                text = text.rsplit("```", 1)[0]
+
+            data = json.loads(text.strip())
+            return {
+                "success": True,
+                "fixed_code": data.get("fixed_code", ""),
+                "explanation": data.get("explanation", ""),
+                "changes_made": data.get("changes_made", []),
+            }
+        except Exception as e:
+            logger.error(f"Gemini fix generation failed: {e}")
+            return {
+                "success": False,
+                "error": str(e),
+                "fixed_code": safe_code,
+                "explanation": "Could not generate AI fix — falling back to historical safe version.",
+                "changes_made": [],
+            }

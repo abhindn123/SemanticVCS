@@ -168,6 +168,97 @@ export function activate(context: vscode.ExtensionContext) {
               const uri = vscode.Uri.file(require("path").join(repoPath, filePath));
               vscode.window.showTextDocument(uri);
             }
+          } else if (message.command === "aiFix") {
+            log(`User chose AI FIX for ${message.functionName}`);
+
+            const repoPath = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || "";
+            const filePath = message.filePath;
+            const path = require("path");
+            const fs = require("fs");
+            const cp = require("child_process");
+
+            try {
+              // Read current bad code
+              const fullPath = path.join(repoPath, filePath);
+              const currentContent = fs.readFileSync(fullPath, "utf-8");
+
+              // Get the safe version from git history for context
+              let safeCode = "";
+              try {
+                safeCode = cp.execSync(`git show HEAD~1:"${filePath}"`, { cwd: repoPath, encoding: "utf-8" });
+              } catch { safeCode = ""; }
+
+              // Detect language from extension
+              const ext = path.extname(filePath).slice(1);
+              const langMap: Record<string, string> = { py: "python", js: "javascript", ts: "typescript", java: "java", go: "go", rs: "rust", rb: "ruby" };
+              const language = langMap[ext] || ext || "python";
+
+              vscode.window.withProgress(
+                { location: vscode.ProgressLocation.Notification, title: "🤖 Gemini is generating a smart fix...", cancellable: false },
+                async () => {
+                  const result = await apiClient.generateFix({
+                    bad_code: currentContent,
+                    safe_code: safeCode,
+                    explanation: message.explanation || "",
+                    function_name: message.functionName || "",
+                    file_path: filePath,
+                    language,
+                  });
+
+                  if (result.fixed_code) {
+                    // Write to a temp file for diff view
+                    const tempPath = path.join(repoPath, `.semanticvcs-fix-${path.basename(filePath)}`);
+                    fs.writeFileSync(tempPath, result.fixed_code, "utf-8");
+
+                    // Show changes made
+                    const changesList = (result.changes_made || []).join("\n• ");
+                    const accept = await vscode.window.showInformationMessage(
+                      `🤖 Gemini generated a fix:\n${result.explanation}`,
+                      "✅ Apply Fix",
+                      "👁️ View Diff",
+                      "❌ Discard"
+                    );
+
+                    if (accept === "✅ Apply Fix") {
+                      fs.writeFileSync(fullPath, result.fixed_code, "utf-8");
+                      // Clean up temp file
+                      try { fs.unlinkSync(tempPath); } catch {}
+
+                      const uri = vscode.Uri.file(fullPath);
+                      await vscode.window.showTextDocument(uri);
+
+                      const commitAction = await vscode.window.showInformationMessage(
+                        `✅ AI fix applied to ${filePath}!\n\nChanges: ${changesList}`,
+                        "Stage & Commit",
+                        "Just Review"
+                      );
+
+                      if (commitAction === "Stage & Commit") {
+                        cp.execSync(`git add "${filePath}"`, { cwd: repoPath });
+                        cp.execSync(`git commit -m "fix(ai): ${message.functionName} — Gemini-generated safe version (SemanticVCS)"`, { cwd: repoPath });
+                        vscode.window.showInformationMessage("✅ AI fix committed!");
+                        log(`Committed Gemini fix for ${filePath}`);
+                      }
+                    } else if (accept === "👁️ View Diff") {
+                      // Show diff between current and AI-fixed version
+                      const currentUri = vscode.Uri.file(fullPath);
+                      const fixedUri = vscode.Uri.file(tempPath);
+                      await vscode.commands.executeCommand("vscode.diff", currentUri, fixedUri, `${filePath} ↔ AI Fix`);
+                    } else {
+                      // Discard
+                      try { fs.unlinkSync(tempPath); } catch {}
+                    }
+
+                    panel.dispose();
+                  } else {
+                    vscode.window.showErrorMessage("AI fix generation failed. Try 'Restore Old Approach' instead.");
+                  }
+                }
+              );
+            } catch (err: any) {
+              log(`AI fix failed: ${err.message}`);
+              vscode.window.showErrorMessage(`AI fix failed: ${err.message}`);
+            }
           }
         },
         undefined,
@@ -228,8 +319,9 @@ function getUnifiedDashboardHtml(warnings: any[], repoId: string, stats: any = {
         ${w.suggested_action ? `<div class="story-section"><div class="story-icon">💡</div><div class="story-content"><strong>Suggested Fix:</strong><br>${w.suggested_action}</div></div>` : ""}
       </div>
       <div class="actions">
-        <button class="btn btn-fix" onclick="handleAction('fix', ${JSON.stringify({ functionName: w.function_name, filePath: w.file_path, startLine: w.start_line, endLine: w.end_line }).replace(/"/g, '&quot;')})">🔧 Fix It — Use Another Approach</button>
-        <button class="btn btn-continue" onclick="handleAction('continue', ${JSON.stringify({ functionName: w.function_name, filePath: w.file_path }).replace(/"/g, '&quot;')})">⚡ Continue Anyway</button>
+        <button class="btn btn-restore" onclick="handleAction('fix', ${JSON.stringify({ functionName: w.function_name, filePath: w.file_path, startLine: w.start_line, endLine: w.end_line }).replace(/"/g, '&quot;')})">🔄 Restore Old Approach</button>
+        <button class="btn btn-ai" onclick="handleAction('aiFix', ${JSON.stringify({ functionName: w.function_name, filePath: w.file_path, startLine: w.start_line, endLine: w.end_line, explanation: (w.explanation || '').slice(0, 300), historicalContext: (w.historical_context || '').slice(0, 300) }).replace(/"/g, '&quot;')})">🤖 Fix with AI (Gemini)</button>
+        <button class="btn btn-continue" onclick="handleAction('continue', ${JSON.stringify({ functionName: w.function_name, filePath: w.file_path }).replace(/"/g, '&quot;')})">⚡ Continue As It Is</button>
       </div>
     </div>`;
   }).join("");
@@ -267,10 +359,12 @@ function getUnifiedDashboardHtml(warnings: any[], repoId: string, stats: any = {
     .author { background: var(--vscode-badge-background); color: var(--vscode-badge-foreground); padding: 1px 6px; border-radius: 3px; font-size: 0.9em; font-weight: 600; }
     .date { color: var(--vscode-descriptionForeground); font-size: 0.85em; }
     .commit-sha { color: var(--vscode-descriptionForeground); font-family: var(--vscode-editor-font-family); font-size: 0.85em; }
-    .actions { display: flex; gap: 12px; margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--vscode-panel-border); }
-    .btn { flex: 1; padding: 10px 20px; border: none; border-radius: 6px; cursor: pointer; font-size: 0.95em; font-weight: 600; font-family: var(--vscode-font-family); transition: opacity 0.2s; }
-    .btn:hover { opacity: 0.85; }
-    .btn-fix { background: var(--vscode-button-background); color: var(--vscode-button-foreground); }
+    .actions { display: flex; gap: 10px; margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--vscode-panel-border); }
+    .btn { flex: 1; padding: 10px 16px; border: none; border-radius: 6px; cursor: pointer; font-size: 0.9em; font-weight: 600; font-family: var(--vscode-font-family); transition: all 0.2s; }
+    .btn:hover { opacity: 0.85; transform: translateY(-1px); }
+    .btn-restore { background: var(--vscode-button-background); color: var(--vscode-button-foreground); }
+    .btn-ai { background: linear-gradient(135deg, #059669, #34d399); color: #fff; }
+    .btn-ai:hover { box-shadow: 0 4px 12px rgba(5, 150, 105, 0.4); }
     .btn-continue { background: transparent; color: var(--vscode-foreground); border: 1px solid var(--vscode-panel-border); }
     .btn-continue:hover { background: var(--vscode-editorWidget-background); }
 

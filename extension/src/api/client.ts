@@ -156,4 +156,16 @@ export class ApiClient {
   async getKnowledgeGraphStats(repoId: string): Promise<any> {
     return this.request<any>("GET", `/api/v1/knowledge-graph/${encodeURIComponent(repoId)}`);
   }
+
+  /** POST /api/v1/generate-fix — AI-generated smart fix */
+  async generateFix(data: {
+    bad_code: string;
+    safe_code: string;
+    explanation: string;
+    function_name: string;
+    file_path: string;
+    language: string;
+  }): Promise<any> {
+    return this.request<any>("POST", "/api/v1/generate-fix", data);
+  }
 }

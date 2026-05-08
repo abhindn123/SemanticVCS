@@ -267,3 +267,40 @@ async def analyze_commit(
         functions_stored=functions_stored,
         processing_time_ms=processing_time,
     )
+
+
+@router.post("/api/v1/generate-fix", tags=["Analysis"])
+async def generate_fix(
+    request: Request,
+    body: dict,
+    user: CurrentUser,
+):
+    """
+    Generate a smart AI fix for risky code using Gemini.
+
+    Instead of dumb git restore, Gemini writes a NEW version that
+    fixes the vulnerability while respecting the developer's intent.
+    """
+    settings = get_settings()
+
+    if not settings.GEMINI_API_KEY:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Gemini API key not configured",
+        )
+
+    risk_analyzer = RiskAnalyzer(
+        api_key=settings.GEMINI_API_KEY,
+        model_name=settings.GEMINI_MODEL,
+    )
+
+    result = await risk_analyzer.generate_fix(
+        bad_code=body.get("bad_code", ""),
+        safe_code=body.get("safe_code", ""),
+        explanation=body.get("explanation", ""),
+        function_name=body.get("function_name", ""),
+        file_path=body.get("file_path", ""),
+        language=body.get("language", "python"),
+    )
+
+    return result
