@@ -138,7 +138,7 @@ export class ApiClient {
 
   /** POST /api/v1/backfill — Backfill historical commits */
   async backfill(payload: BackfillRequest): Promise<BackfillResponse> {
-    return this.request<BackfillResponse>("POST", "/api/v1/backfill", payload, 1, 120000);
+    return this.request<BackfillResponse>("POST", "/api/v1/backfill", payload, 1, 300000);
   }
 
   /** POST /api/v1/webhook/revert — Mark a commit as reverted */

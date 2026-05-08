@@ -12,9 +12,10 @@ import { ApiClient } from "../api/client";
 import { BackfillCommit } from "../api/types";
 import { log, logError } from "../utils/logger";
 
-const BATCH_SIZE = 2; // Commits per API call (keep small to avoid backend timeout)
+const BATCH_SIZE = 1; // 1 commit per API call (UniXCoder on CPU is slow)
 const MAX_COMMITS = 200; // Max commits to backfill
-const MAX_FILES_PER_COMMIT = 10; // Max code files per commit (skip huge initial commits)
+const MAX_FILES_PER_COMMIT = 5; // Max code files per commit
+const MAX_FILE_LINES = 500; // Truncate large files to avoid long embedding times
 
 const LANGUAGE_MAP: Record<string, string> = {
   ".py": "python",
@@ -118,23 +119,33 @@ async function getCommitDiff(
       try {
         // Try normal diff first (works for non-root commits)
         const diff = await execGit(repoPath, `diff ${sha}~1 ${sha} -- "${filePath}"`);
-        const fileContent = await execGit(repoPath, `show ${sha}:"${filePath}"`);
+        let fileContent = await execGit(repoPath, `show ${sha}:"${filePath}"`);
 
         if (diff && fileContent) {
+          // Truncate large files to keep embedding fast
+          const contentLines = fileContent.split("\n");
+          if (contentLines.length > MAX_FILE_LINES) {
+            fileContent = contentLines.slice(0, MAX_FILE_LINES).join("\n");
+          }
           diffs.push({ file_path: filePath, language, diff, file_content: fileContent });
         } else {
-          log(`    ⚠️ diff or content empty for ${filePath} (diff=${!!diff}, content=${!!fileContent})`);
+          log(`    ⚠️ diff or content empty for ${filePath}`);
         }
       } catch (err: any) {
         log(`    ⚠️ diff failed for ${filePath}: ${err.message?.slice(0, 120)}`);
         // Root commit or file doesn't exist in parent — generate a synthetic diff
         try {
-          const fileContent = await execGit(repoPath, `show ${sha}:"${filePath}"`);
+          let fileContent = await execGit(repoPath, `show ${sha}:"${filePath}"`);
           if (fileContent) {
+            // Truncate large files
             const lines = fileContent.split("\n");
+            if (lines.length > MAX_FILE_LINES) {
+              fileContent = lines.slice(0, MAX_FILE_LINES).join("\n");
+            }
+            const truncLines = fileContent.split("\n");
             const fakeDiff =
-              `@@ -0,0 +1,${lines.length} @@\n` +
-              lines.map((l) => `+${l}`).join("\n");
+              `@@ -0,0 +1,${truncLines.length} @@\n` +
+              truncLines.map((l) => `+${l}`).join("\n");
             diffs.push({ file_path: filePath, language, diff: fakeDiff, file_content: fileContent });
           }
         } catch (err2: any) {
@@ -213,13 +224,21 @@ export async function runBackfill(
           });
 
           const diffs = await getCommitDiff(repoPath, commit.sha);
-          log(`  ${commit.sha.slice(0, 7)}: ${diffs.length} code file(s) found${diffs.length > 0 ? ` [${diffs.map(d => d.file_path).join(', ')}]` : ''}`);
+          log(`  ${commit.sha.slice(0, 7)}: ${diffs.length} file(s)${diffs.length > 0 ? ` [${diffs.map(d => d.file_path).join(', ')}]` : ' (skip)'}`);
           backfillCommits.push({
             sha: commit.sha,
             message: commit.message,
             author: commit.author,
             diffs,
           });
+        }
+
+        // Skip if ALL commits in batch have 0 code files
+        const totalDiffs = backfillCommits.reduce((sum, c) => sum + c.diffs.length, 0);
+        if (totalDiffs === 0) {
+          log(`  → Skipped batch (no code files)`);
+          progress.report({ increment: incrementPerBatch });
+          continue;
         }
 
         // Send batch to backend
@@ -234,8 +253,7 @@ export async function runBackfill(
           totalReverts += result.reverts_detected;
 
           log(
-            `Batch ${Math.floor(i / BATCH_SIZE) + 1}: ` +
-            `${result.commits_processed} processed, ` +
+            `  ✅ ${result.commits_processed} processed, ` +
             `${result.functions_embedded} embedded, ` +
             `${result.reverts_detected} reverts`
           );
