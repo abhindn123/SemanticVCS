@@ -51,7 +51,7 @@ class Settings(BaseSettings):
     MAX_SEARCH_RESULTS: int = 10
 
     # --- Rate Limiting ---
-    RATE_LIMIT_PER_MINUTE: int = 30
+    RATE_LIMIT_PER_MINUTE: int = 200
 
     # --- Neo4j (Knowledge Graph) ---
     NEO4J_URI: str = ""
