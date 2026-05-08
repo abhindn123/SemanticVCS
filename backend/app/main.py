@@ -19,6 +19,7 @@ from app.config import get_settings
 from app.services.qdrant_service import QdrantService
 from app.services.supabase_service import SupabaseService
 from app.services.redis_service import RedisService
+from app.services.neo4j_service import Neo4jService
 
 # Configure logging
 logging.basicConfig(
@@ -89,6 +90,25 @@ async def lifespan(app: FastAPI):
         logger.warning("   The /analyze endpoint will not work until the model is loaded.")
         app.state.embedder = None
 
+    # === 5. Neo4j (Knowledge Graph) ===
+    try:
+        if settings.NEO4J_URI:
+            logger.info("Connecting to Neo4j...")
+            neo4j_service = Neo4jService(
+                uri=settings.NEO4J_URI,
+                user=settings.NEO4J_USER,
+                password=settings.NEO4J_PASSWORD,
+            )
+            await neo4j_service.verify_connectivity()
+            await neo4j_service.ensure_indexes()
+            app.state.neo4j_service = neo4j_service
+        else:
+            logger.warning("NEO4J_URI not set — Knowledge Graph disabled")
+            app.state.neo4j_service = None
+    except Exception as e:
+        logger.warning(f"Could not connect to Neo4j (continuing without KG): {e}")
+        app.state.neo4j_service = None
+
     logger.info("🟢 SemanticVCS Backend is ready!")
     logger.info(f"   API docs: http://{settings.API_HOST}:{settings.API_PORT}/docs")
 
@@ -98,6 +118,8 @@ async def lifespan(app: FastAPI):
     logger.info("Shutting down SemanticVCS Backend...")
     await qdrant_client.close()
     await redis_service.close()
+    if app.state.neo4j_service:
+        await app.state.neo4j_service.close()
     logger.info("👋 Goodbye!")
 
 

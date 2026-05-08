@@ -53,6 +53,11 @@ class Settings(BaseSettings):
     # --- Rate Limiting ---
     RATE_LIMIT_PER_MINUTE: int = 30
 
+    # --- Neo4j (Knowledge Graph) ---
+    NEO4J_URI: str = ""
+    NEO4J_USER: str = "neo4j"
+    NEO4J_PASSWORD: str = ""
+
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"

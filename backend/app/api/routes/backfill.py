@@ -14,9 +14,10 @@ import time
 
 from fastapi import APIRouter, HTTPException, Request, status
 
-from app.api.deps import CurrentUser, QdrantDep, RedisDep, SupabaseDep
+from app.api.deps import CurrentUser, Neo4jDep, QdrantDep, RedisDep, SupabaseDep
 from app.core.diff_extractor import extract_changed_functions
 from app.core.embedder import CodeEmbedder
+from app.core.relationship_extractor import extract_relationships
 from app.models.schemas import BackfillRequest, BackfillResponse
 
 logger = logging.getLogger(__name__)
@@ -84,6 +85,7 @@ async def backfill_history(
     qdrant: QdrantDep,
     supabase: SupabaseDep,
     redis: RedisDep,
+    neo4j: Neo4jDep,
 ) -> BackfillResponse:
     """
     Process historical commits in batch.
@@ -155,6 +157,24 @@ async def backfill_history(
             except Exception as e:
                 logger.debug(f"Failed to extract functions from {file_diff.file_path}: {e}")
                 continue
+
+            # Knowledge Graph: store relationships for this file
+            if neo4j:
+                try:
+                    lang = file_diff.language if hasattr(file_diff, 'language') else 'typescript'
+                    rels = extract_relationships(file_diff.file_content, file_diff.file_path, lang)
+                    await neo4j.store_file_relationships(
+                        file_path=file_diff.file_path,
+                        repo_id=body.repo_id,
+                        imports=rels["imports"],
+                        function_names=rels["function_names"],
+                        table_usages=rels["table_usages"],
+                        api_calls=rels["api_calls"],
+                        commit_sha=commit.sha,
+                        is_reverted=is_reverted,
+                    )
+                except Exception as e:
+                    logger.debug(f"KG storage failed for {file_diff.file_path}: {e}")
 
             for func_diff in changed_functions:
                 # Embed the function

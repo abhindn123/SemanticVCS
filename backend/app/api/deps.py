@@ -13,6 +13,7 @@ from fastapi import Depends, Header, HTTPException, Request, status
 from app.services.qdrant_service import QdrantService
 from app.services.supabase_service import SupabaseService
 from app.services.redis_service import RedisService
+from app.services.neo4j_service import Neo4jService
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +33,11 @@ def get_supabase(request: Request) -> SupabaseService:
 def get_redis(request: Request) -> RedisService:
     """Get the Redis service from app state."""
     return request.app.state.redis_service
+
+
+def get_neo4j(request: Request) -> Neo4jService:
+    """Get the Neo4j service from app state."""
+    return request.app.state.neo4j_service
 
 
 # === Authentication ===
@@ -89,4 +95,5 @@ async def get_current_user(
 QdrantDep = Annotated[QdrantService, Depends(get_qdrant)]
 SupabaseDep = Annotated[SupabaseService, Depends(get_supabase)]
 RedisDep = Annotated[RedisService, Depends(get_redis)]
+Neo4jDep = Annotated[Neo4jService, Depends(get_neo4j)]
 CurrentUser = Annotated[dict, Depends(get_current_user)]

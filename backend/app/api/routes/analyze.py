@@ -13,10 +13,11 @@ from uuid import uuid4
 
 from fastapi import APIRouter, HTTPException, Request, status
 
-from app.api.deps import CurrentUser, QdrantDep, RedisDep, SupabaseDep
+from app.api.deps import CurrentUser, Neo4jDep, QdrantDep, RedisDep, SupabaseDep
 from app.config import get_settings
 from app.core.diff_extractor import extract_changed_functions
 from app.core.embedder import CodeEmbedder
+from app.core.relationship_extractor import extract_relationships
 from app.core.risk_analyzer import RiskAnalyzer
 from app.core.similarity import is_high_risk_match, search_similar_functions
 from app.models.schemas import (
@@ -38,6 +39,7 @@ async def analyze_commit(
     qdrant: QdrantDep,
     supabase: SupabaseDep,
     redis: RedisDep,
+    neo4j: Neo4jDep,
 ) -> AnalyzeResponse:
     """
     Analyze a commit for semantic similarity to past problematic code.
@@ -99,6 +101,23 @@ async def analyze_commit(
             logger.debug(f"No functions found in {file_diff.file_path}")
             continue
 
+        # Knowledge Graph: extract and store relationships
+        if neo4j:
+            try:
+                lang = file_diff.language if hasattr(file_diff, 'language') else 'typescript'
+                rels = extract_relationships(file_diff.file_content, file_diff.file_path, lang)
+                await neo4j.store_file_relationships(
+                    file_path=file_diff.file_path,
+                    repo_id=body.repo_id,
+                    imports=rels["imports"],
+                    function_names=rels["function_names"],
+                    table_usages=rels["table_usages"],
+                    api_calls=rels["api_calls"],
+                    commit_sha=body.commit_sha,
+                )
+            except Exception as e:
+                logger.warning(f"KG storage failed for {file_diff.file_path}: {e}")
+
         for func_diff in changed_functions:
             functions_analyzed += 1
 
@@ -123,7 +142,7 @@ async def analyze_commit(
                 except Exception:
                     pass
 
-            # Step 3: Search for similar past functions
+            # Step 3: Search for similar past functions (VECTOR)
             matches = await search_similar_functions(
                 vector=vector,
                 repo_id=body.repo_id,
@@ -132,6 +151,24 @@ async def analyze_commit(
                 threshold=settings.SIMILARITY_THRESHOLD,
                 exclude_commit_sha=body.commit_sha,
             )
+
+            # Step 3b: Check Knowledge Graph for dependency risk
+            graph_risk = None
+            if neo4j:
+                try:
+                    graph_risk = await neo4j.get_dependency_risk(
+                        file_path=file_diff.file_path,
+                        repo_id=body.repo_id,
+                    )
+                    if graph_risk["graph_risk_score"] > 0:
+                        logger.info(
+                            f"KG risk for {file_diff.file_path}: "
+                            f"score={graph_risk['graph_risk_score']:.2f}, "
+                            f"tables={graph_risk['shared_reverted_tables']}, "
+                            f"blast_radius={graph_risk['blast_radius']}"
+                        )
+                except Exception as e:
+                    logger.warning(f"KG risk check failed: {e}")
 
             # Step 4: Process matches
             for match in matches:
