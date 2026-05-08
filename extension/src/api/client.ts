@@ -151,4 +151,9 @@ export class ApiClient {
     const key = await this.getApiKey();
     return !!key;
   }
+
+  /** GET /api/v1/knowledge-graph/{repo_id} — Get Knowledge Graph stats */
+  async getKnowledgeGraphStats(repoId: string): Promise<any> {
+    return this.request<any>("GET", `/api/v1/knowledge-graph/${encodeURIComponent(repoId)}`);
+  }
 }

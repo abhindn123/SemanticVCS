@@ -56,6 +56,12 @@ export function activate(context: vscode.ExtensionContext) {
         const repoId = await getRepoId(repoPath);
         const stats = await apiClient.getStats(repoId);
 
+        // Fetch Knowledge Graph stats (fail-open)
+        let kgStats = null;
+        try {
+          kgStats = await apiClient.getKnowledgeGraphStats(repoId);
+        } catch { /* KG not available */ }
+
         const panel = vscode.window.createWebviewPanel(
           "semanticvcs.dashboard",
           "SemanticVCS Dashboard",
@@ -63,7 +69,7 @@ export function activate(context: vscode.ExtensionContext) {
           { enableScripts: true }
         );
 
-        panel.webview.html = getDashboardHtml(stats, repoId);
+        panel.webview.html = getDashboardHtml(stats, repoId, kgStats);
       } catch (error) {
         logError("Failed to open dashboard", error);
         vscode.window.showErrorMessage("Could not load dashboard. Check your connection.");
@@ -186,13 +192,15 @@ export function deactivate() {
 }
 
 /**
- * Generate stats dashboard HTML.
+ * Generate stats dashboard HTML with dual analysis engines display.
  */
-function getDashboardHtml(stats: any, repoId: string): string {
+function getDashboardHtml(stats: any, repoId: string, kgStats: any = null): string {
   const high = stats.warnings_by_risk?.HIGH || 0;
   const medium = stats.warnings_by_risk?.MEDIUM || 0;
   const low = stats.warnings_by_risk?.LOW || 0;
   const topFiles = stats.top_risky_files || [];
+  const kgActive = kgStats?.status === "active";
+  const kg = kgStats?.graph_stats || {};
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -203,13 +211,42 @@ function getDashboardHtml(stats: any, repoId: string): string {
   <style>
     body { font-family: var(--vscode-font-family); color: var(--vscode-foreground); background: var(--vscode-editor-background); padding: 20px; margin: 0; }
     h1 { color: var(--vscode-foreground); border-bottom: 1px solid var(--vscode-panel-border); padding-bottom: 12px; }
-    .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin: 24px 0; }
-    .stat-card { background: var(--vscode-editorWidget-background); border: 1px solid var(--vscode-panel-border); border-radius: 8px; padding: 20px; text-align: center; }
-    .stat-value { font-size: 2.5em; font-weight: bold; margin: 8px 0; }
-    .stat-label { color: var(--vscode-descriptionForeground); font-size: 0.9em; text-transform: uppercase; letter-spacing: 1px; }
+    h2 { font-size: 1.15em; margin: 28px 0 12px 0; }
+    .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 14px; margin: 20px 0; }
+    .stat-card { background: var(--vscode-editorWidget-background); border: 1px solid var(--vscode-panel-border); border-radius: 8px; padding: 18px; text-align: center; }
+    .stat-value { font-size: 2.2em; font-weight: bold; margin: 6px 0; }
+    .stat-label { color: var(--vscode-descriptionForeground); font-size: 0.82em; text-transform: uppercase; letter-spacing: 1px; }
     .high { color: #f44336; } .medium { color: #ff9800; } .low { color: #2196f3; } .clean { color: #4caf50; }
+
+    .engines-container { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 20px 0; }
+    .engine-card { background: var(--vscode-editorWidget-background); border: 1px solid var(--vscode-panel-border); border-radius: 10px; padding: 20px 22px; position: relative; overflow: hidden; }
+    .engine-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px; }
+    .engine-vector::before { background: linear-gradient(90deg, #7c3aed, #a78bfa); }
+    .engine-graph::before { background: linear-gradient(90deg, #059669, #34d399); }
+    .engine-header { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+    .engine-icon { font-size: 1.5em; }
+    .engine-title { font-weight: 700; font-size: 1em; }
+    .engine-badge { font-size: 0.7em; padding: 2px 8px; border-radius: 10px; font-weight: 600; }
+    .badge-active { background: #065f46; color: #34d399; }
+    .badge-inactive { background: #451a03; color: #fb923c; }
+    .engine-desc { color: var(--vscode-descriptionForeground); font-size: 0.85em; margin-bottom: 14px; line-height: 1.5; }
+    .engine-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .engine-stat { background: var(--vscode-editor-background); border-radius: 6px; padding: 10px; text-align: center; }
+    .engine-stat-value { font-size: 1.4em; font-weight: 700; }
+    .engine-stat-label { font-size: 0.72em; color: var(--vscode-descriptionForeground); text-transform: uppercase; letter-spacing: 0.5px; }
+    .vector-accent { color: #a78bfa; }
+    .graph-accent { color: #34d399; }
+
+    .flow-diagram { display: flex; align-items: center; justify-content: center; gap: 4px; flex-wrap: wrap; padding: 14px; background: var(--vscode-editorWidget-background); border: 1px solid var(--vscode-panel-border); border-radius: 10px; }
+    .flow-step { padding: 7px 12px; border-radius: 6px; font-size: 0.78em; font-weight: 600; }
+    .flow-arrow { color: var(--vscode-descriptionForeground); font-size: 1.1em; }
+    .flow-code { background: #1e1b4b; color: #c4b5fd; }
+    .flow-vector { background: #2e1065; color: #a78bfa; }
+    .flow-graph { background: #064e3b; color: #34d399; }
+    .flow-risk { background: #7f1d1d; color: #fca5a5; }
+    .flow-ai { background: #1e3a5f; color: #93c5fd; }
+
     .section { margin: 24px 0; }
-    .section h2 { color: var(--vscode-foreground); font-size: 1.2em; margin-bottom: 12px; }
     .file-list { list-style: none; padding: 0; }
     .file-list li { padding: 8px 12px; background: var(--vscode-editorWidget-background); border: 1px solid var(--vscode-panel-border); border-radius: 4px; margin-bottom: 4px; font-family: var(--vscode-editor-font-family); }
     .repo-name { color: var(--vscode-descriptionForeground); font-size: 0.9em; }
@@ -218,14 +255,68 @@ function getDashboardHtml(stats: any, repoId: string): string {
 <body>
   <h1>🛡️ SemanticVCS Dashboard</h1>
   <p class="repo-name">Repository: <strong>${repoId}</strong></p>
+
   <div class="stats-grid">
     <div class="stat-card"><div class="stat-label">Commits Analyzed</div><div class="stat-value clean">${stats.total_commits_analyzed || 0}</div></div>
     <div class="stat-card"><div class="stat-label">Total Warnings</div><div class="stat-value">${stats.total_warnings || 0}</div></div>
     <div class="stat-card"><div class="stat-label">High Risk</div><div class="stat-value high">${high}</div></div>
     <div class="stat-card"><div class="stat-label">Medium Risk</div><div class="stat-value medium">${medium}</div></div>
     <div class="stat-card"><div class="stat-label">Low Risk</div><div class="stat-value low">${low}</div></div>
-    <div class="stat-card"><div class="stat-label">Duplicate Clusters</div><div class="stat-value">${stats.duplicate_clusters || 0}</div></div>
   </div>
+
+  <h2>⚙️ Analysis Engines</h2>
+  <div class="engines-container">
+    <div class="engine-card engine-vector">
+      <div class="engine-header">
+        <span class="engine-icon">🔮</span>
+        <span class="engine-title">Vector DB — Qdrant</span>
+        <span class="engine-badge badge-active">ACTIVE</span>
+      </div>
+      <div class="engine-desc">
+        UniXCoder embeds each function into a 768-dim vector.
+        Detects code that <strong>semantically matches</strong> reverted patterns — even with renamed variables.
+      </div>
+      <div class="engine-stats">
+        <div class="engine-stat"><div class="engine-stat-value vector-accent">${stats.total_commits_analyzed || 0}</div><div class="engine-stat-label">Commits Indexed</div></div>
+        <div class="engine-stat"><div class="engine-stat-value vector-accent">${stats.total_warnings || 0}</div><div class="engine-stat-label">Risks Detected</div></div>
+      </div>
+    </div>
+    <div class="engine-card engine-graph">
+      <div class="engine-header">
+        <span class="engine-icon">🕸️</span>
+        <span class="engine-title">Knowledge Graph — Neo4j</span>
+        <span class="engine-badge ${kgActive ? 'badge-active' : 'badge-inactive'}">${kgActive ? 'ACTIVE' : 'CONNECTING'}</span>
+      </div>
+      <div class="engine-desc">
+        Tracks <strong>dependency relationships</strong> — imports, function calls, DB tables, APIs.
+        Detects risk from shared dependencies with reverted code.
+      </div>
+      <div class="engine-stats">
+        <div class="engine-stat"><div class="engine-stat-value graph-accent">${kg.files || 0}</div><div class="engine-stat-label">Files Tracked</div></div>
+        <div class="engine-stat"><div class="engine-stat-value graph-accent">${kg.functions || 0}</div><div class="engine-stat-label">Functions</div></div>
+        <div class="engine-stat"><div class="engine-stat-value graph-accent">${kg.tables || 0}</div><div class="engine-stat-label">DB Tables</div></div>
+        <div class="engine-stat"><div class="engine-stat-value graph-accent">${kg.commits || 0}</div><div class="engine-stat-label">Commits</div></div>
+      </div>
+    </div>
+  </div>
+
+  <h2>🔄 Detection Pipeline</h2>
+  <div class="flow-diagram">
+    <div class="flow-step flow-code">📝 Code Change</div>
+    <span class="flow-arrow">→</span>
+    <div class="flow-step flow-code">🌳 tree-sitter AST</div>
+    <span class="flow-arrow">→</span>
+    <div class="flow-step flow-vector">🔮 UniXCoder Embed</div>
+    <span class="flow-arrow">→</span>
+    <div class="flow-step flow-vector">🔍 Qdrant Search</div>
+    <span class="flow-arrow">→</span>
+    <div class="flow-step flow-graph">🕸️ Neo4j Deps</div>
+    <span class="flow-arrow">→</span>
+    <div class="flow-step flow-risk">⚠️ Combined Risk</div>
+    <span class="flow-arrow">→</span>
+    <div class="flow-step flow-ai">🤖 Gemini Explains</div>
+  </div>
+
   ${topFiles.length > 0 ? `<div class="section"><h2>🔥 Top Risky Files</h2><ul class="file-list">${topFiles.map((f: string, i: number) => `<li>${i + 1}. ${f}</li>`).join("")}</ul></div>` : ""}
 </body></html>`;
 }

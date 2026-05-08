@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SemanticVCS Workflow</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Inter',sans-serif;background:#080816;color:#ddd;padding:40px 30px;overflow-x:auto}
+h1{text-align:center;font-size:2em;font-weight:800;background:linear-gradient(90deg,#00d4ff,#a855f7,#f43f5e);-webkit-background-clip:text;-webkit-text-fill-color:transparent;margin-bottom:4px}
+.sub{text-align:center;color:#556;font-size:.82em;margin-bottom:40px}
+
+/* Row */
+.row{margin-bottom:14px}
+.row-label{font-size:.62em;font-weight:700;letter-spacing:2px;text-transform:uppercase;padding:4px 14px;border-radius:10px;display:inline-block;margin-bottom:12px}
+.r1 .row-label{background:#0a2030;color:#38bdf8;border:1px solid #164e63}
+.r2 .row-label{background:#1a0a30;color:#c084fc;border:1px solid #3b0764}
+.r3 .row-label{background:#0a200a;color:#4ade80;border:1px solid #14532d}
+.r4 .row-label{background:#200a0a;color:#fb7185;border:1px solid #4c0519}
+.r5 .row-label{background:#1a1a05;color:#fbbf24;border:1px solid #422006}
+
+/* Steps container */
+.steps{display:flex;align-items:center;gap:0;overflow-x:auto;padding-bottom:6px}
+
+/* Step card */
+.step{min-width:155px;max-width:170px;background:#0e0e22;border:1px solid #1a1a36;border-radius:14px;padding:14px;flex-shrink:0;position:relative;transition:all .3s}
+.step:hover{border-color:#a855f7;transform:translateY(-3px);box-shadow:0 6px 24px rgba(168,85,247,.12)}
+.step-icon{font-size:1.6em;margin-bottom:6px}
+.step-name{font-weight:700;font-size:.82em;color:#fff;margin-bottom:4px;line-height:1.3}
+.step-tech{font-size:.68em;color:#a855f7;font-weight:600;margin-bottom:4px}
+.step-desc{font-size:.7em;color:#667;line-height:1.4}
+
+/* Arrow between steps */
+.arr{min-width:44px;display:flex;align-items:center;justify-content:center;flex-shrink:0;position:relative;height:40px}
+.arr svg{width:44px;height:20px;overflow:visible}
+.arr-line{stroke-dasharray:6 4;animation:dash .8s linear infinite}
+@keyframes dash{to{stroke-dashoffset:-10}}
+.arr-head{fill:none;stroke-width:2}
+.arr-dot{animation:glow 1.5s ease-in-out infinite}
+@keyframes glow{0%,100%{opacity:.4;r:2}50%{opacity:1;r:3.5}}
+
+/* Decision diamond */
+.decision{min-width:130px;max-width:140px;background:linear-gradient(135deg,#18140a,#1a100a);border:2px solid #f59e0b;text-align:center}
+.decision .step-name{color:#fbbf24;font-size:.78em}
+
+/* Branch paths */
+.branch{display:flex;flex-direction:column;gap:6px;min-width:155px;flex-shrink:0}
+.branch-card{background:#0e0e22;border-radius:10px;padding:10px 12px;border:1px solid #1a1a36;transition:all .3s}
+.branch-card:hover{border-color:#a855f7}
+.branch-tag{font-size:.58em;font-weight:700;letter-spacing:1px;text-transform:uppercase;padding:2px 7px;border-radius:4px;display:inline-block;margin-bottom:4px}
+.tag-y{background:#1a0505;color:#f87171;border:1px solid #7f1d1d}
+.tag-n{background:#051a05;color:#4ade80;border:1px solid #14532d}
+.tag-fix{background:#05101a;color:#60a5fa;border:1px solid #1e3a5f}
+.tag-cont{background:#1a1505;color:#fbbf24;border:1px solid #422006}
+.branch-name{font-weight:600;font-size:.76em;color:#eee}
+.branch-sub{font-size:.65em;color:#667;margin-top:2px}
+
+/* Vertical connector between rows */
+.vconn{height:24px;display:flex;justify-content:center;margin:0 0 0 80px}
+.vconn svg{width:20px;height:24px}
+.vconn .arr-line{stroke-dasharray:4 3}
+
+footer{text-align:center;margin-top:40px;color:#333;font-size:.7em}
+</style>
+</head>
+<body>
+
+<h1>⚡ SemanticVCS Workflow</h1>
+<p class="sub">How your code flows through the system — step by step, left to right</p>
+
+<!-- ROW 1: SETUP -->
+<div class="row r1">
+<div class="row-label">🔧 One-Time Setup</div>
+<div class="steps">
+
+<div class="step">
+<div class="step-icon">📦</div>
+<div class="step-name">Install Extension</div>
+<div class="step-tech">VS Code Marketplace</div>
+<div class="step-desc">Install .vsix into VS Code. Activates on startup.</div>
+</div>
+
+<div class="arr"><svg viewBox="0 0 44 20"><line class="arr-line" x1="0" y1="10" x2="34" y2="10" stroke="#38bdf8" stroke-width="2"/><polygon class="arr-head" points="32,6 40,10 32,14" stroke="#38bdf8"/><circle class="arr-dot" cx="38" cy="10" fill="#38bdf8"/></svg></div>
+
+<div class="step">
+<div class="step-icon">🔑</div>
+<div class="step-name">Set API Key</div>
+<div class="step-tech">VS Code Global State</div>
+<div class="step-desc">Set once → works for all projects. Stored encrypted.</div>
+</div>
+
+<div class="arr"><svg viewBox="0 0 44 20"><line class="arr-line" x1="0" y1="10" x2="34" y2="10" stroke="#38bdf8" stroke-width="2"/><polygon class="arr-head" points="32,6 40,10 32,14" stroke="#38bdf8"/><circle class="arr-dot" cx="38" cy="10" fill="#38bdf8"/></svg></div>
+
+<div class="step">
+<div class="step-icon">📜</div>
+<div class="step-name">Backfill History</div>
+<div class="step-tech">Git CLI • git log</div>
+<div class="step-desc">Reads last 200 commits from git history.</div>
+</div>
+
+<div class="arr"><svg viewBox="0 0 44 20"><line class="arr-line" x1="0" y1="10" x2="34" y2="10" stroke="#38bdf8" stroke-width="2"/><polygon class="arr-head" points="32,6 40,10 32,14" stroke="#38bdf8"/><circle class="arr-dot" cx="38" cy="10" fill="#38bdf8"/></svg></div>
+
+<div class="step">
+<div class="step-icon">🌳</div>
+<div class="step-name">Parse Functions</div>
+<div class="step-tech">tree-sitter</div>
+<div class="step-desc">AST parsing extracts every function from each commit.</div>
+</div>
+
+<div class="arr"><svg viewBox="0 0 44 20"><line class="arr-line" x1="0" y1="10" x2="34" y2="10" stroke="#38bdf8" stroke-width="2"/><polygon class="arr-head" points="32,6 40,10 32,14" stroke="#38bdf8"/><circle class="arr-dot" cx="38" cy="10" fill="#38bdf8"/></svg></div>
+
+<div class="step">
+<div class="step-icon">🧬</div>
+<div class="step-name">Embed Code</div>
+<div class="step-tech">UniXCoder (Microsoft)</div>
+<div class="step-desc">Each function → 768-dim vector fingerprint.</div>
+</div>
+
+<div class="arr"><svg viewBox="0 0 44 20"><line class="arr-line" x1="0" y1="10" x2="34" y2="10" stroke="#38bdf8" stroke-width="2"/><polygon class="arr-head" points="32,6 40,10 32,14" stroke="#38bdf8"/><circle class="arr-dot" cx="38" cy="10" fill="#38bdf8"/></svg></div>
+
+<div class="step">
+<div class="step-icon">💾</div>
+<div class="step-name">Store Vectors</div>
+<div class="step-tech">Qdrant + Supabase</div>
+<div class="step-desc">Vectors → Qdrant. Metadata → Supabase. Reverts auto-detected.</div>
+</div>
+
+<div class="arr"><svg viewBox="0 0 44 20"><line class="arr-line" x1="0" y1="10" x2="34" y2="10" stroke="#22c55e" stroke-width="2"/><polygon class="arr-head" points="32,6 40,10 32,14" stroke="#22c55e"/><circle class="arr-dot" cx="38" cy="10" fill="#22c55e"/></svg></div>
+
+<div class="step" style="border-color:#22c55e">
+<div class="step-icon">✅</div>
+<div class="step-name" style="color:#4ade80">Ready!</div>
+<div class="step-desc">Repo has semantic memory. Now watches automatically.</div>
+</div>
+
+</div></div>
+
+<!-- VERTICAL CONNECTOR -->
+<div class="vconn"><svg viewBox="0 0 20 24"><line class="arr-line" x1="10" y1="0" x2="10" y2="18" stroke="#a855f7" stroke-width="2"/><polygon class="arr-head" points="6,16 10,22 14,16" stroke="#a855f7" fill="none"/></svg></div>
+
+<!-- ROW 2: COMMIT DETECTION -->
+<div class="row r2">
+<div class="row-label">🔄 Commit Detection (Automatic)</div>
+<div class="steps">
+
+<div class="step">
+<div class="step-icon">💻</div>
+<div class="step-name">You Write & Commit</div>
+<div class="step-tech">git commit</div>
+<div class="step-desc">Normal workflow. No extra steps needed.</div>
+</div>
+
+<div class="arr"><svg viewBox="0 0 44 20"><line class="arr-line" x1="0" y1="10" x2="34" y2="10" stroke="#c084fc" stroke-width="2"/><polygon class="arr-head" points="32,6 40,10 32,14" stroke="#c084fc"/><circle class="arr-dot" cx="38" cy="10" fill="#c084fc"/></svg></div>
+
+<div class="step">
+<div class="step-icon">👁️</div>
+<div class="step-name">HEAD Change Detected</div>
+<div class="step-tech">VS Code Git API</div>
+<div class="step-desc">Extension detects new commit SHA. Triggers analysis.</div>
+</div>
+
+<div class="arr"><svg viewBox="0 0 44 20"><line class="arr-line" x1="0" y1="10" x2="34" y2="10" stroke="#c084fc" stroke-width="2"/><polygon class="arr-head" points="32,6 40,10 32,14" stroke="#c084fc"/><circle class="arr-dot" cx="38" cy="10" fill="#c084fc"/></svg></div>
+
+<div class="step">
+<div class="step-icon">📄</div>
+<div class="step-name">Extract Diff</div>
+<div class="step-tech">Git CLI • diff HEAD~1</div>
+<div class="step-desc">Gets changed files + line-level diffs. Filters .py .ts .js .tsx only.</div>
+</div>
+
+<div class="arr"><svg viewBox="0 0 44 20"><line class="arr-line" x1="0" y1="10" x2="34" y2="10" stroke="#c084fc" stroke-width="2"/><polygon class="arr-head" points="32,6 40,10 32,14" stroke="#c084fc"/><circle class="arr-dot" cx="38" cy="10" fill="#c084fc"/></svg></div>
+
+<div class="step">
+<div class="step-icon">🌳</div>
+<div class="step-name">Parse Changed Functions</div>
+<div class="step-tech">tree-sitter</div>
+<div class="step-desc">Builds AST → finds functions overlapping with diff lines.</div>
+</div>
+
+<div class="arr"><svg viewBox="0 0 44 20"><line class="arr-line" x1="0" y1="10" x2="34" y2="10" stroke="#c084fc" stroke-width="2"/><polygon class="arr-head" points="32,6 40,10 32,14" stroke="#c084fc"/><circle class="arr-dot" cx="38" cy="10" fill="#c084fc"/></svg></div>
+
+<div class="step">
+<div class="step-icon">🧬</div>
+<div class="step-name">Embed Function</div>
+<div class="step-tech">UniXCoder → 768-dim</div>
+<div class="step-desc">Creates vector fingerprint. Cached in Redis by hash.</div>
+</div>
+
+<div class="arr"><svg viewBox="0 0 44 20"><line class="arr-line" x1="0" y1="10" x2="34" y2="10" stroke="#c084fc" stroke-width="2"/><polygon class="arr-head" points="32,6 40,10 32,14" stroke="#c084fc"/><circle class="arr-dot" cx="38" cy="10" fill="#c084fc"/></svg></div>
+
+<div class="step">
+<div class="step-icon">🔎</div>
+<div class="step-name">Search Past Code</div>
+<div class="step-tech">Qdrant • cosine sim</div>
+<div class="step-desc">Find top 10 similar functions. Threshold ≥ 75%.</div>
+</div>
+
+</div></div>
+
+<div class="vconn"><svg viewBox="0 0 20 24"><line class="arr-line" x1="10" y1="0" x2="10" y2="18" stroke="#f59e0b" stroke-width="2"/><polygon class="arr-head" points="6,16 10,22 14,16" stroke="#f59e0b" fill="none"/></svg></div>
+
+<!-- ROW 3: RISK ANALYSIS -->
+<div class="row r3">
+<div class="row-label">⚠️ Risk Analysis</div>
+<div class="steps">
+
+<div class="step decision">
+<div class="step-icon">❓</div>
+<div class="step-name">Match Found?</div>
+<div class="step-desc">Similarity ≥ 75%?</div>
+</div>
+
+<div class="arr"><svg viewBox="0 0 44 20"><line class="arr-line" x1="0" y1="10" x2="34" y2="10" stroke="#f59e0b" stroke-width="2"/><polygon class="arr-head" points="32,6 40,10 32,14" stroke="#f59e0b"/></svg></div>
+
+<div class="branch">
+<div class="branch-card"><div class="branch-tag tag-y">YES — Match</div><div class="branch-name">Check Supabase</div><div class="branch-sub">Look up revert_status & bug_ids</div></div>
+<div class="branch-card"><div class="branch-tag tag-n">NO — Novel code</div><div class="branch-name" style="color:#4ade80">✅ Clean</div><div class="branch-sub">No risk. Pipeline stops.</div></div>
+</div>
+
+<div class="arr"><svg viewBox="0 0 44 20"><line class="arr-line" x1="0" y1="10" x2="34" y2="10" stroke="#f59e0b" stroke-width="2"/><polygon class="arr-head" points="32,6 40,10 32,14" stroke="#f59e0b"/></svg></div>
+
+<div class="step decision">
+<div class="step-icon">🔄</div>
+<div class="step-name">Was It Reverted?</div>
+<div class="step-desc">Bad outcome in history?</div>
+</div>
+
+<div class="arr"><svg viewBox="0 0 44 20"><line class="arr-line" x1="0" y1="10" x2="34" y2="10" stroke="#f59e0b" stroke-width="2"/><polygon class="arr-head" points="32,6 40,10 32,14" stroke="#f59e0b"/></svg></div>
+
+<div class="branch">
+<div class="branch-card"><div class="branch-tag tag-y">YES — Reverted/Bug</div><div class="branch-name">🤖 Gemini 2.5 Flash</div><div class="branch-sub">Analyzes risk: HIGH / MED / LOW + explanation + suggested fix</div></div>
+<div class="branch-card"><div class="branch-tag tag-n">NO — Clean history</div><div class="branch-name">Low risk info</div><div class="branch-sub">Informational warning only</div></div>
+</div>
+
+</div></div>
+
+<div class="vconn"><svg viewBox="0 0 20 24"><line class="arr-line" x1="10" y1="0" x2="10" y2="18" stroke="#f43f5e" stroke-width="2"/><polygon class="arr-head" points="6,16 10,22 14,16" stroke="#f43f5e" fill="none"/></svg></div>
+
+<!-- ROW 4: DASHBOARD -->
+<div class="row r4">
+<div class="row-label">📊 Dashboard (Auto-Opens)</div>
+<div class="steps">
+
+<div class="step">
+<div class="step-icon">📊</div>
+<div class="step-name">Dashboard Opens</div>
+<div class="step-tech">VS Code Webview</div>
+<div class="step-desc">Rich panel auto-opens inside your editor.</div>
+</div>
+
+<div class="arr"><svg viewBox="0 0 44 20"><line class="arr-line" x1="0" y1="10" x2="34" y2="10" stroke="#fb7185" stroke-width="2"/><polygon class="arr-head" points="32,6 40,10 32,14" stroke="#fb7185"/></svg></div>
+
+<div class="step">
+<div class="step-icon">📝</div>
+<div class="step-name">Who Committed</div>
+<div class="step-tech">Supabase → author</div>
+<div class="step-desc">Shows @author who made the similar change before.</div>
+</div>
+
+<div class="arr"><svg viewBox="0 0 44 20"><line class="arr-line" x1="0" y1="10" x2="34" y2="10" stroke="#fb7185" stroke-width="2"/><polygon class="arr-head" points="32,6 40,10 32,14" stroke="#fb7185"/></svg></div>
+
+<div class="step">
+<div class="step-icon">💬</div>
+<div class="step-name">What & Why</div>
+<div class="step-tech">Supabase → message</div>
+<div class="step-desc">Original commit message explaining the change.</div>
+</div>
+
+<div class="arr"><svg viewBox="0 0 44 20"><line class="arr-line" x1="0" y1="10" x2="34" y2="10" stroke="#fb7185" stroke-width="2"/><polygon class="arr-head" points="32,6 40,10 32,14" stroke="#fb7185"/></svg></div>
+
+<div class="step">
+<div class="step-icon">⚠️</div>
+<div class="step-name">What Went Wrong</div>
+<div class="step-tech">Gemini analysis</div>
+<div class="step-desc">Why the code was reverted or caused bugs.</div>
+</div>
+
+<div class="arr"><svg viewBox="0 0 44 20"><line class="arr-line" x1="0" y1="10" x2="34" y2="10" stroke="#fb7185" stroke-width="2"/><polygon class="arr-head" points="32,6 40,10 32,14" stroke="#fb7185"/></svg></div>
+
+<div class="step">
+<div class="step-icon">💡</div>
+<div class="step-name">Suggested Fix</div>
+<div class="step-tech">Gemini 2.5 Flash</div>
+<div class="step-desc">AI-generated safer approach to solve the same problem.</div>
+</div>
+
+</div></div>
+
+<div class="vconn"><svg viewBox="0 0 20 24"><line class="arr-line" x1="10" y1="0" x2="10" y2="18" stroke="#fbbf24" stroke-width="2"/><polygon class="arr-head" points="6,16 10,22 14,16" stroke="#fbbf24" fill="none"/></svg></div>
+
+<!-- ROW 5: USER DECISION -->
+<div class="row r5">
+<div class="row-label">🎯 Developer Decision</div>
+<div class="steps">
+
+<div class="step decision">
+<div class="step-icon">🎯</div>
+<div class="step-name">Your Choice</div>
+</div>
+
+<div class="arr"><svg viewBox="0 0 44 20"><line class="arr-line" x1="0" y1="10" x2="34" y2="10" stroke="#fbbf24" stroke-width="2"/><polygon class="arr-head" points="32,6 40,10 32,14" stroke="#fbbf24"/></svg></div>
+
+<div class="branch" style="min-width:200px">
+<div class="branch-card" style="border:1px solid #1e3a5f">
+<div class="branch-tag tag-fix">🔧 Fix It</div>
+<div class="branch-name">Auto-Restore Safe Version</div>
+<div class="branch-sub">git checkout HEAD~1 → restores file → asks "Stage & Commit?" → one-click fix</div>
+</div>
+<div class="branch-card" style="border:1px solid #422006">
+<div class="branch-tag tag-cont">⚡ Continue Anyway</div>
+<div class="branch-name">Proceed With Caution</div>
+<div class="branch-sub">Dashboard closes. Commit stays. Developer takes responsibility.</div>
+</div>
+</div>
+
+<div class="arr"><svg viewBox="0 0 44 20"><line class="arr-line" x1="0" y1="10" x2="34" y2="10" stroke="#22c55e" stroke-width="2"/><polygon class="arr-head" points="32,6 40,10 32,14" stroke="#22c55e"/></svg></div>
+
+<div class="step" style="border-color:#22c55e">
+<div class="step-icon">🛡️</div>
+<div class="step-name" style="color:#4ade80">Code Protected</div>
+<div class="step-desc">Team never repeats the same mistake twice.</div>
+</div>
+
+</div></div>
+
+<footer>SemanticVCS — A Semantic Memory Layer for Git • Team JUGAADU</footer>
+</body>
+</html>
