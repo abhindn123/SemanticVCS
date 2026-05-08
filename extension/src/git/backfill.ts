@@ -12,8 +12,9 @@ import { ApiClient } from "../api/client";
 import { BackfillCommit } from "../api/types";
 import { log, logError } from "../utils/logger";
 
-const BATCH_SIZE = 5; // Commits per API call
+const BATCH_SIZE = 2; // Commits per API call (keep small to avoid backend timeout)
 const MAX_COMMITS = 200; // Max commits to backfill
+const MAX_FILES_PER_COMMIT = 10; // Max code files per commit (skip huge initial commits)
 
 const LANGUAGE_MAP: Record<string, string> = {
   ".py": "python",
@@ -104,6 +105,10 @@ async function getCommitDiff(
       .filter((f) => f.length > 0);
 
     for (const filePath of changedFiles) {
+      if (diffs.length >= MAX_FILES_PER_COMMIT) {
+        log(`    ⚡ Reached max ${MAX_FILES_PER_COMMIT} files for this commit, skipping rest`);
+        break;
+      }
       const ext = path.extname(filePath);
       const language = LANGUAGE_MAP[ext];
       if (!language) {
@@ -116,9 +121,12 @@ async function getCommitDiff(
         const fileContent = await execGit(repoPath, `show ${sha}:"${filePath}"`);
 
         if (diff && fileContent) {
-          diffs.push({ file_path: filePath, language, diff, file_content });
+          diffs.push({ file_path: filePath, language, diff, file_content: fileContent });
+        } else {
+          log(`    ⚠️ diff or content empty for ${filePath} (diff=${!!diff}, content=${!!fileContent})`);
         }
-      } catch {
+      } catch (err: any) {
+        log(`    ⚠️ diff failed for ${filePath}: ${err.message?.slice(0, 120)}`);
         // Root commit or file doesn't exist in parent — generate a synthetic diff
         try {
           const fileContent = await execGit(repoPath, `show ${sha}:"${filePath}"`);
@@ -127,10 +135,10 @@ async function getCommitDiff(
             const fakeDiff =
               `@@ -0,0 +1,${lines.length} @@\n` +
               lines.map((l) => `+${l}`).join("\n");
-            diffs.push({ file_path: filePath, language, diff: fakeDiff, file_content });
+            diffs.push({ file_path: filePath, language, diff: fakeDiff, file_content: fileContent });
           }
-        } catch {
-          // Skip unreachable files
+        } catch (err2: any) {
+          log(`    ❌ show also failed for ${filePath}: ${err2.message?.slice(0, 120)}`);
         }
       }
     }
@@ -205,6 +213,7 @@ export async function runBackfill(
           });
 
           const diffs = await getCommitDiff(repoPath, commit.sha);
+          log(`  ${commit.sha.slice(0, 7)}: ${diffs.length} code file(s) found${diffs.length > 0 ? ` [${diffs.map(d => d.file_path).join(', ')}]` : ''}`);
           backfillCommits.push({
             sha: commit.sha,
             message: commit.message,
