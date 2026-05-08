@@ -11,7 +11,7 @@ import logging
 import time
 from uuid import uuid4
 
-from fastapi import APIRouter, HTTPException, Request, status
+from fastapi import APIRouter, Body, HTTPException, Request, status
 
 from app.api.deps import CurrentUser, Neo4jDep, QdrantDep, RedisDep, SupabaseDep
 from app.config import get_settings
@@ -272,8 +272,8 @@ async def analyze_commit(
 @router.post("/api/v1/generate-fix", tags=["Analysis"])
 async def generate_fix(
     request: Request,
-    body: dict,
-    user: CurrentUser,
+    body: dict = Body(...),
+    user: CurrentUser = None,
 ):
     """
     Generate a smart AI fix for risky code using Gemini.

@@ -193,68 +193,75 @@ export function activate(context: vscode.ExtensionContext) {
               const langMap: Record<string, string> = { py: "python", js: "javascript", ts: "typescript", java: "java", go: "go", rs: "rust", rb: "ruby" };
               const language = langMap[ext] || ext || "python";
 
-              vscode.window.withProgress(
-                { location: vscode.ProgressLocation.Notification, title: "🤖 Gemini is generating a smart fix...", cancellable: false },
-                async () => {
-                  const result = await apiClient.generateFix({
-                    bad_code: currentContent,
-                    safe_code: safeCode,
-                    explanation: message.explanation || "",
-                    function_name: message.functionName || "",
-                    file_path: filePath,
-                    language,
-                  });
-
-                  if (result.fixed_code) {
-                    // Write to a temp file for diff view
-                    const tempPath = path.join(repoPath, `.semanticvcs-fix-${path.basename(filePath)}`);
-                    fs.writeFileSync(tempPath, result.fixed_code, "utf-8");
-
-                    // Show changes made
-                    const changesList = (result.changes_made || []).join("\n• ");
-                    const accept = await vscode.window.showInformationMessage(
-                      `🤖 Gemini generated a fix:\n${result.explanation}`,
-                      "✅ Apply Fix",
-                      "👁️ View Diff",
-                      "❌ Discard"
-                    );
-
-                    if (accept === "✅ Apply Fix") {
-                      fs.writeFileSync(fullPath, result.fixed_code, "utf-8");
-                      // Clean up temp file
-                      try { fs.unlinkSync(tempPath); } catch {}
-
-                      const uri = vscode.Uri.file(fullPath);
-                      await vscode.window.showTextDocument(uri);
-
-                      const commitAction = await vscode.window.showInformationMessage(
-                        `✅ AI fix applied to ${filePath}!\n\nChanges: ${changesList}`,
-                        "Stage & Commit",
-                        "Just Review"
-                      );
-
-                      if (commitAction === "Stage & Commit") {
-                        cp.execSync(`git add "${filePath}"`, { cwd: repoPath });
-                        cp.execSync(`git commit -m "fix(ai): ${message.functionName} — Gemini-generated safe version (SemanticVCS)"`, { cwd: repoPath });
-                        vscode.window.showInformationMessage("✅ AI fix committed!");
-                        log(`Committed Gemini fix for ${filePath}`);
-                      }
-                    } else if (accept === "👁️ View Diff") {
-                      // Show diff between current and AI-fixed version
-                      const currentUri = vscode.Uri.file(fullPath);
-                      const fixedUri = vscode.Uri.file(tempPath);
-                      await vscode.commands.executeCommand("vscode.diff", currentUri, fixedUri, `${filePath} ↔ AI Fix`);
-                    } else {
-                      // Discard
-                      try { fs.unlinkSync(tempPath); } catch {}
-                    }
-
-                    panel.dispose();
-                  } else {
-                    vscode.window.showErrorMessage("AI fix generation failed. Try 'Restore Old Approach' instead.");
+              let result: any = null;
+              try {
+                result = await vscode.window.withProgress(
+                  { location: vscode.ProgressLocation.Notification, title: "🤖 Gemini is generating a smart fix...", cancellable: false },
+                  async () => {
+                    return await apiClient.generateFix({
+                      bad_code: currentContent,
+                      safe_code: safeCode,
+                      explanation: message.explanation || "",
+                      function_name: message.functionName || "",
+                      file_path: filePath,
+                      language,
+                    });
                   }
+                );
+              } catch (apiErr: any) {
+                log(`AI fix API failed: ${apiErr.message}`);
+                vscode.window.showErrorMessage(`AI fix API error: ${apiErr.message}`);
+                return;
+              }
+
+              log(`AI fix result: ${JSON.stringify(result).slice(0, 200)}`);
+
+              if (result && result.fixed_code) {
+                // Write to a temp file for diff view
+                const tempPath = path.join(repoPath, `.semanticvcs-fix-${path.basename(filePath)}`);
+                fs.writeFileSync(tempPath, result.fixed_code, "utf-8");
+
+                // Show changes made
+                const changesList = (result.changes_made || []).join(", ");
+                const accept = await vscode.window.showInformationMessage(
+                  `🤖 AI Fix Ready: ${result.explanation || "Gemini generated a safer version."}`,
+                  "✅ Apply Fix",
+                  "👁️ View Diff",
+                  "❌ Discard"
+                );
+
+                if (accept === "✅ Apply Fix") {
+                  fs.writeFileSync(fullPath, result.fixed_code, "utf-8");
+                  try { fs.unlinkSync(tempPath); } catch {}
+
+                  const uri = vscode.Uri.file(fullPath);
+                  await vscode.window.showTextDocument(uri);
+
+                  const commitAction = await vscode.window.showInformationMessage(
+                    `✅ AI fix applied! Changes: ${changesList}`,
+                    "Stage & Commit",
+                    "Just Review"
+                  );
+
+                  if (commitAction === "Stage & Commit") {
+                    cp.execSync(`git add "${filePath}"`, { cwd: repoPath });
+                    cp.execSync(`git commit -m "fix(ai): ${message.functionName} — Gemini-generated safe version (SemanticVCS)"`, { cwd: repoPath });
+                    vscode.window.showInformationMessage("✅ AI fix committed!");
+                    log(`Committed Gemini fix for ${filePath}`);
+                  }
+                } else if (accept === "👁️ View Diff") {
+                  const currentUri = vscode.Uri.file(fullPath);
+                  const fixedUri = vscode.Uri.file(tempPath);
+                  await vscode.commands.executeCommand("vscode.diff", currentUri, fixedUri, `${filePath} ↔ AI Fix`);
+                } else {
+                  try { fs.unlinkSync(tempPath); } catch {}
                 }
-              );
+
+                panel.dispose();
+              } else {
+                const errMsg = result?.error || "Unknown error";
+                vscode.window.showErrorMessage(`AI fix failed: ${errMsg}. Try 'Restore Old Approach' instead.`);
+              }
             } catch (err: any) {
               log(`AI fix failed: ${err.message}`);
               vscode.window.showErrorMessage(`AI fix failed: ${err.message}`);
