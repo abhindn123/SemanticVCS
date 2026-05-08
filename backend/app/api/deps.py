@@ -60,14 +60,19 @@ async def get_current_user(
             detail="API key is required",
         )
 
-    # Check rate limit
-    is_allowed, remaining = await redis.check_rate_limit(api_key)
-    if not is_allowed:
-        raise HTTPException(
-            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail="Rate limit exceeded. Please wait and try again.",
-            headers={"X-RateLimit-Remaining": "0"},
-        )
+    # Check rate limit (fail-open: if Redis is down, allow the request)
+    try:
+        is_allowed, remaining = await redis.check_rate_limit(api_key)
+        if not is_allowed:
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail="Rate limit exceeded. Please wait and try again.",
+                headers={"X-RateLimit-Remaining": "0"},
+            )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.warning(f"Rate limit check failed (allowing request): {e}")
 
     # Look up user by API key
     user = await supabase.get_user_by_api_key(api_key)

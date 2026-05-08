@@ -102,9 +102,13 @@ async def analyze_commit(
         for func_diff in changed_functions:
             functions_analyzed += 1
 
-            # Step 2: Check embedding cache
+            # Step 2: Check embedding cache (fail-open if Redis is down)
             code_hash = embedder.code_hash(func_diff.new_body)
-            cached_vector = await redis.get_cached_embedding(body.repo_id, code_hash)
+            cached_vector = None
+            try:
+                cached_vector = await redis.get_cached_embedding(body.repo_id, code_hash)
+            except Exception:
+                pass
 
             if cached_vector:
                 vector = cached_vector
@@ -113,8 +117,11 @@ async def analyze_commit(
                 vector_np = embedder.embed(func_diff.new_body)
                 vector = vector_np.tolist()
 
-                # Cache the embedding
-                await redis.cache_embedding(body.repo_id, code_hash, vector)
+                # Cache the embedding (best-effort)
+                try:
+                    await redis.cache_embedding(body.repo_id, code_hash, vector)
+                except Exception:
+                    pass
 
             # Step 3: Search for similar past functions
             matches = await search_similar_functions(

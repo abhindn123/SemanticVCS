@@ -159,14 +159,23 @@ async def backfill_history(
             for func_diff in changed_functions:
                 # Embed the function
                 code_hash = embedder.code_hash(func_diff.new_body)
-                cached_vector = await redis.get_cached_embedding(body.repo_id, code_hash)
+                
+                # Try cache first (fail-open if Redis is down)
+                cached_vector = None
+                try:
+                    cached_vector = await redis.get_cached_embedding(body.repo_id, code_hash)
+                except Exception:
+                    pass  # Redis down — skip cache
 
                 if cached_vector:
                     vector = cached_vector
                 else:
                     vector_np = embedder.embed(func_diff.new_body)
                     vector = vector_np.tolist()
-                    await redis.cache_embedding(body.repo_id, code_hash, vector)
+                    try:
+                        await redis.cache_embedding(body.repo_id, code_hash, vector)
+                    except Exception:
+                        pass  # Redis down — skip cache
 
                 # Store in Qdrant
                 await qdrant.upsert_embedding(
