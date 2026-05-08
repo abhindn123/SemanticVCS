@@ -269,7 +269,7 @@ async def analyze_commit(
     )
 
 
-@router.post("/api/v1/generate-fix", tags=["Analysis"])
+@router.post("/generate-fix", tags=["Analysis"])
 async def generate_fix(
     request: Request,
     body: dict = Body(...),
