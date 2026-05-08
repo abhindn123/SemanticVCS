@@ -106,10 +106,15 @@ export function activate(context: vscode.ExtensionContext) {
     vscode.commands.registerCommand("semanticvcs.showWarnings", async (warnings: any[], repoId: string) => {
       log(`Showing ${warnings.length} warnings in unified dashboard`);
 
-      // Fetch stats + KG in background (fail-open)
-      let stats = {}; let kgStats = null;
+      // Fetch stats + KG + blast radius in background (fail-open)
+      let stats = {}; let kgStats = null; let blastData: any = null;
       try { stats = await apiClient.getStats(repoId); } catch {}
       try { kgStats = await apiClient.getKnowledgeGraphStats(repoId); } catch {}
+
+      // Get blast radius for the first warning's file
+      if (warnings.length > 0 && warnings[0].file_path) {
+        try { blastData = await apiClient.getBlastRadius(repoId, warnings[0].file_path); } catch {}
+      }
 
       const panel = vscode.window.createWebviewPanel(
         "semanticvcs.unified",
@@ -118,7 +123,7 @@ export function activate(context: vscode.ExtensionContext) {
         { enableScripts: true }
       );
 
-      panel.webview.html = getUnifiedDashboardHtml(warnings, repoId, stats, kgStats);
+      panel.webview.html = getUnifiedDashboardHtml(warnings, repoId, stats, kgStats, blastData);
 
       // Handle button clicks from the webview
       panel.webview.onDidReceiveMessage(
@@ -294,7 +299,7 @@ export function deactivate() {
 /**
  * Generate unified dashboard HTML — warnings + engines + pipeline in one view.
  */
-function getUnifiedDashboardHtml(warnings: any[], repoId: string, stats: any = {}, kgStats: any = null): string {
+function getUnifiedDashboardHtml(warnings: any[], repoId: string, stats: any = {}, kgStats: any = null, blastData: any = null): string {
   const high = (stats as any).warnings_by_risk?.HIGH || 0;
   const medium = (stats as any).warnings_by_risk?.MEDIUM || 0;
   const low = (stats as any).warnings_by_risk?.LOW || 0;
@@ -407,6 +412,20 @@ function getUnifiedDashboardHtml(warnings: any[], repoId: string, stats: any = {
     .file-list { list-style: none; padding: 0; }
     .file-list li { padding: 8px 12px; background: var(--vscode-editorWidget-background); border: 1px solid var(--vscode-panel-border); border-radius: 4px; margin-bottom: 4px; font-family: var(--vscode-editor-font-family); }
     .repo-name { color: var(--vscode-descriptionForeground); font-size: 0.9em; }
+
+    .blast-container { background: var(--vscode-editorWidget-background); border: 1px solid var(--vscode-panel-border); border-radius: 10px; padding: 22px 24px; margin: 20px 0; position: relative; overflow: hidden; }
+    .blast-container::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px; background: linear-gradient(90deg, #ef4444, #f97316, #eab308); }
+    .blast-header { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; }
+    .blast-title { font-weight: 700; font-size: 1.1em; }
+    .blast-count { background: #7f1d1d; color: #fca5a5; padding: 2px 10px; border-radius: 10px; font-size: 0.8em; font-weight: 600; }
+    .blast-tree { margin: 0; padding: 0; list-style: none; }
+    .blast-root { padding: 10px 14px; background: #7f1d1d33; border: 1px solid #7f1d1d; border-radius: 8px; margin-bottom: 10px; font-weight: 600; font-family: var(--vscode-editor-font-family); color: #fca5a5; font-size: 0.95em; }
+    .blast-dep { display: flex; align-items: flex-start; gap: 10px; padding: 10px 14px; background: var(--vscode-editor-background); border: 1px solid var(--vscode-panel-border); border-radius: 6px; margin-bottom: 6px; margin-left: 28px; position: relative; }
+    .blast-dep::before { content: '├──→'; position: absolute; left: -28px; top: 10px; color: var(--vscode-descriptionForeground); font-family: var(--vscode-editor-font-family); font-size: 0.8em; }
+    .blast-dep:last-child::before { content: '└──→'; }
+    .blast-dep-file { font-weight: 600; font-family: var(--vscode-editor-font-family); color: var(--vscode-textLink-foreground); }
+    .blast-dep-uses { color: var(--vscode-descriptionForeground); font-size: 0.85em; }
+    .blast-empty { color: var(--vscode-descriptionForeground); font-style: italic; padding: 10px 0; }
   </style>
 </head>
 <body>
@@ -414,6 +433,30 @@ function getUnifiedDashboardHtml(warnings: any[], repoId: string, stats: any = {
   ${hasWarnings ? `<p class="subtitle">Your commit matches ${warnings.length} historical pattern(s) that had bad outcomes in <strong>${repoId}</strong></p>` : `<p class="repo-name">Repository: <strong>${repoId}</strong></p>`}
 
   ${hasWarnings ? warningCards : ''}
+
+  ${blastData && blastData.status === 'active' ? `
+  <div class="blast-container">
+    <div class="blast-header">
+      <span style="font-size:1.4em">💥</span>
+      <span class="blast-title">Blast Radius</span>
+      <span class="blast-count">${blastData.total_affected || 0} file${(blastData.total_affected || 0) !== 1 ? 's' : ''} affected</span>
+    </div>
+    <div class="blast-root">📄 ${blastData.changed_file || 'unknown'} <span style="color: #fca5a5; font-weight: normal; font-size: 0.85em;">(you changed this)</span></div>
+    <ul class="blast-tree">
+      ${(blastData.dependent_files || []).length > 0 
+        ? (blastData.dependent_files || []).map((dep: any) => `
+          <li class="blast-dep">
+            <div>
+              <div class="blast-dep-file">📄 ${dep.file}</div>
+              ${dep.uses && dep.uses.length > 0 ? `<div class="blast-dep-uses">uses: <code>${dep.uses.join('</code>, <code>')}</code></div>` : ''}
+            </div>
+          </li>
+        `).join('')
+        : '<li class="blast-empty">No dependent files found in the Knowledge Graph. Run backfill to populate.</li>'
+      }
+    </ul>
+    ${(blastData.affected_functions || []).length > 0 ? `<div style="margin-top: 12px; color: var(--vscode-descriptionForeground); font-size: 0.85em;">⚡ Functions in changed file: <code>${blastData.affected_functions.join('</code>, <code>')}</code></div>` : ''}
+  </div>` : ''}
 
   <div class="stats-grid">
     <div class="stat-card"><div class="stat-label">Commits Analyzed</div><div class="stat-value clean">${(stats as any).total_commits_analyzed || 0}</div></div>

@@ -254,3 +254,79 @@ class Neo4jService:
             if record:
                 return dict(record)
             return {"files": 0, "functions": 0, "tables": 0, "commits": 0}
+
+    async def get_blast_radius(self, file_path: str, repo_id: str) -> dict:
+        """
+        Get detailed blast radius for a file — which files depend on it
+        and which specific functions they use.
+
+        Returns:
+            {
+                "changed_file": str,
+                "dependent_files": [
+                    {"file": "orders.py", "uses": ["sanitize_input", "hash_password"]},
+                    ...
+                ],
+                "total_affected": int,
+                "affected_functions": [...],
+            }
+        """
+        result = {
+            "changed_file": file_path,
+            "dependent_files": [],
+            "total_affected": 0,
+            "affected_functions": [],
+        }
+
+        async with self.driver.session() as session:
+            # Find files that import the changed file + which functions they use
+            res = await session.run(
+                """
+                MATCH (dep:File {repo_id: $repo_id})-[:IMPORTS]->(changed:File {path: $file_path, repo_id: $repo_id})
+                OPTIONAL MATCH (changed)-[:CONTAINS]->(fn:Function)
+                RETURN dep.path AS dependent_file,
+                       collect(DISTINCT fn.name) AS functions_used
+                """,
+                file_path=file_path,
+                repo_id=repo_id,
+            )
+            records = await res.data()
+
+            for r in records:
+                result["dependent_files"].append({
+                    "file": r["dependent_file"],
+                    "uses": [f for f in r["functions_used"] if f],
+                })
+
+            # Also check transitive dependencies (depth 2-3)
+            res = await session.run(
+                """
+                MATCH (dep:File {repo_id: $repo_id})-[:IMPORTS*2..3]->(changed:File {path: $file_path, repo_id: $repo_id})
+                WHERE NOT (dep)-[:IMPORTS]->(changed)
+                RETURN DISTINCT dep.path AS dependent_file
+                """,
+                file_path=file_path,
+                repo_id=repo_id,
+            )
+            records = await res.data()
+            for r in records:
+                result["dependent_files"].append({
+                    "file": r["dependent_file"],
+                    "uses": ["(indirect dependency)"],
+                })
+
+            result["total_affected"] = len(result["dependent_files"])
+
+            # Get all functions in the changed file
+            res = await session.run(
+                """
+                MATCH (f:File {path: $file_path, repo_id: $repo_id})-[:CONTAINS]->(fn:Function)
+                RETURN fn.name AS function_name
+                """,
+                file_path=file_path,
+                repo_id=repo_id,
+            )
+            records = await res.data()
+            result["affected_functions"] = [r["function_name"] for r in records]
+
+        return result

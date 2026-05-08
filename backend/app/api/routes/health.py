@@ -93,3 +93,23 @@ async def get_file_risk(repo_id: str, file_path: str, request: Request):
         "file_path": file_path,
         "risk": risk,
     }
+
+
+@router.get("/api/v1/blast-radius/{repo_id:path}", tags=["Knowledge Graph"])
+async def get_blast_radius(repo_id: str, request: Request, file: str = ""):
+    """
+    Get blast radius for a file — what other files could break.
+    Shows dependency tree with specific functions used.
+    """
+    neo4j = getattr(request.app.state, "neo4j_service", None)
+    if not neo4j:
+        return {"status": "disabled", "blast_radius": {"dependent_files": [], "total_affected": 0}}
+
+    if not file:
+        return {"status": "error", "message": "file query parameter required"}
+
+    try:
+        blast = await neo4j.get_blast_radius(file_path=file, repo_id=repo_id)
+        return {"status": "active", **blast}
+    except Exception as e:
+        return {"status": "error", "message": str(e), "blast_radius": {"dependent_files": [], "total_affected": 0}}

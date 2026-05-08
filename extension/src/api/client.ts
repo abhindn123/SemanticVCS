@@ -168,4 +168,9 @@ export class ApiClient {
   }): Promise<any> {
     return this.request<any>("POST", "/api/v1/generate-fix", data);
   }
+
+  /** GET /api/v1/blast-radius/{repo_id}?file={file} — Blast radius */
+  async getBlastRadius(repoId: string, filePath: string): Promise<any> {
+    return this.request<any>("GET", `/api/v1/blast-radius/${encodeURIComponent(repoId)}?file=${encodeURIComponent(filePath)}`);
+  }
 }
