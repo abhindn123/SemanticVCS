@@ -53,3 +53,43 @@ async def health_check(request: Request) -> HealthResponse:
         model_loaded=model_loaded,
         uptime_seconds=round(uptime, 2),
     )
+
+
+@router.get("/api/v1/knowledge-graph/{repo_id:path}", tags=["Knowledge Graph"])
+async def get_knowledge_graph(repo_id: str, request: Request):
+    """
+    Get Knowledge Graph stats and dependency info for a repository.
+    Shows nodes, edges, tables, and blast radius data.
+    """
+    neo4j = getattr(request.app.state, "neo4j_service", None)
+    if not neo4j:
+        return {
+            "status": "disabled",
+            "message": "Knowledge Graph (Neo4j) is not connected",
+        }
+
+    stats = await neo4j.get_graph_stats(repo_id)
+
+    return {
+        "status": "active",
+        "repo_id": repo_id,
+        "graph_stats": stats,
+    }
+
+
+@router.get("/api/v1/knowledge-graph/{repo_id:path}/risk/{file_path:path}", tags=["Knowledge Graph"])
+async def get_file_risk(repo_id: str, file_path: str, request: Request):
+    """
+    Get dependency-based risk for a specific file.
+    Shows shared reverted tables, APIs, and blast radius.
+    """
+    neo4j = getattr(request.app.state, "neo4j_service", None)
+    if not neo4j:
+        return {"status": "disabled"}
+
+    risk = await neo4j.get_dependency_risk(file_path=file_path, repo_id=repo_id)
+    return {
+        "status": "active",
+        "file_path": file_path,
+        "risk": risk,
+    }
