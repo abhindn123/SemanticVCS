@@ -1,0 +1,10 @@
+{
+  "name": "semanticvcs-cli",
+  "version": "1.0.0",
+  "description": "SemanticVCS — Git wrapper with semantic risk detection",
+  "bin": {
+    "svcs": "./bin/svcs.js"
+  },
+  "keywords": ["git", "security", "ai", "semantic", "vcs"],
+  "license": "MIT"
+}
