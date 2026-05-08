@@ -101,7 +101,8 @@ export async function extractDiffs(repoPath: string): Promise<FileDiff[]> {
     // Get list of changed files in the latest commit
     const changedFiles = (await execGit(repoPath, "diff-tree --no-commit-id --name-only -r HEAD"))
       .trim()
-      .split("\n")
+      .split(/\r?\n/)
+      .map((f) => f.trim())
       .filter((f) => f.length > 0);
 
     log(`Changed files: ${changedFiles.join(", ")}`);

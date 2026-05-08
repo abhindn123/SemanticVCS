@@ -57,7 +57,8 @@ export class ApiClient {
     method: string,
     path: string,
     body?: unknown,
-    retries: number = 3
+    retries: number = 3,
+    timeoutMs: number = 30000
   ): Promise<T> {
     const apiKey = await this.getApiKey();
     if (!apiKey) {
@@ -70,7 +71,7 @@ export class ApiClient {
     for (let attempt = 0; attempt < retries; attempt++) {
       try {
         const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 30000); // 30s timeout
+        const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
         const response = await fetch(url, {
           method,
@@ -137,7 +138,7 @@ export class ApiClient {
 
   /** POST /api/v1/backfill — Backfill historical commits */
   async backfill(payload: BackfillRequest): Promise<BackfillResponse> {
-    return this.request<BackfillResponse>("POST", "/api/v1/backfill", payload, 1);
+    return this.request<BackfillResponse>("POST", "/api/v1/backfill", payload, 1, 120000);
   }
 
   /** POST /api/v1/webhook/revert — Mark a commit as reverted */

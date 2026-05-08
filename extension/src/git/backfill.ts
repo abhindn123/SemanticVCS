@@ -71,7 +71,7 @@ async function getCommitLog(
 
   return output
     .trim()
-    .split("\n")
+    .split(/\r?\n/)
     .filter((line) => line.length > 0)
     .map((line) => {
       const parts = line.split("|||");
@@ -99,7 +99,8 @@ async function getCommitDiff(
       await execGit(repoPath, `diff-tree --root --no-commit-id --name-only -r ${sha}`)
     )
       .trim()
-      .split("\n")
+      .split(/\r?\n/)
+      .map((f) => f.trim())
       .filter((f) => f.length > 0);
 
     for (const filePath of changedFiles) {
