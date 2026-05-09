@@ -19,6 +19,7 @@ const path = require('path');
 // Load our commands
 const { handleCommit } = require('../src/commit');
 const { handleStatus } = require('../src/status');
+const { handleBackfill } = require('../src/backfill');
 const { passthrough } = require('../src/passthrough');
 const { c } = require('../src/ui');
 
@@ -34,6 +35,7 @@ ${c.dim}A drop-in replacement for git with AI-powered risk detection.${c.reset}
 ${c.bold}Usage:${c.reset}
   svcs commit -m "message"    Commit + analyze for risks
   svcs status                 Git status + SemanticVCS stats
+  svcs backfill               Scan history & learn from reverts
   svcs init                   Initialize SemanticVCS in this repo
   svcs <any git command>      Passes through to git
 
@@ -57,6 +59,10 @@ ${c.dim}Powered by Qdrant (vector search) + Neo4j (knowledge graph) + Gemini (AI
 
       case 'status':
         await handleStatus(args.slice(1));
+        break;
+
+      case 'backfill':
+        await handleBackfill();
         break;
 
       case 'init':

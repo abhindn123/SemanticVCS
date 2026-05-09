@@ -145,7 +145,7 @@ async function handleCommit(args) {
 
   // Parse changed files
   const fileChunks = diff.split(/^diff --git /m).filter(Boolean);
-  const files = [];
+  const diffs = [];
 
   for (const chunk of fileChunks) {
     const pathMatch = chunk.match(/a\/(.+?) b\//);
@@ -157,18 +157,23 @@ async function handleCommit(args) {
     const language = supportedLangs[ext];
     if (!language) continue;
 
-    const functions = extractFunctions(chunk, filePath);
-    if (functions.length === 0) continue;
+    // Get the full file content (what the backend needs for function extraction)
+    let fileContent = '';
+    try {
+      fileContent = git(`show HEAD:"${filePath}"`);
+    } catch {
+      continue; // file deleted
+    }
 
-    files.push({
-      path: filePath,
+    diffs.push({
+      file_path: filePath,
       language,
-      diff: chunk.slice(0, 3000),
-      functions,
+      diff: 'diff --git ' + chunk,
+      file_content: fileContent,
     });
   }
 
-  if (files.length === 0) {
+  if (diffs.length === 0) {
     spin.stop(`${c.green}✅ No analyzable functions changed${c.reset}`);
     return;
   }
@@ -179,19 +184,9 @@ async function handleCommit(args) {
     result = await api.analyze({
       repo_id: repoId,
       commit_sha: sha,
-      commit_message: message,
+      message,
       author,
-      files: files.map(f => ({
-        path: f.path,
-        language: f.language,
-        diff: f.diff,
-        functions: f.functions.map(fn => ({
-          name: fn.name,
-          code: fn.code,
-          start_line: fn.start_line,
-          end_line: fn.end_line,
-        })),
-      })),
+      diffs,
     });
   } catch (err) {
     spin.stop(`${c.yellow}⚠️  Analysis unavailable: ${err.message}${c.reset}`);

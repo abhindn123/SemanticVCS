@@ -6,7 +6,7 @@ const https = require('https');
 const http = require('http');
 
 const API_BASE = 'https://semanticvcs-production.up.railway.app';
-const API_KEY = 'svcs_dev_key_001';
+const API_KEY = 'svcs_XXxnDzU8GKd1BQ_T5AHO-DB8gfKXmtGuN4A2avbDs-s';
 
 function request(method, path, body = null) {
   return new Promise((resolve, reject) => {
@@ -17,6 +17,7 @@ function request(method, path, body = null) {
     const headers = {
       'Content-Type': 'application/json',
       'X-API-Key': API_KEY,
+      'Authorization': `Bearer ${API_KEY}`,
     };
     
     const bodyStr = body ? JSON.stringify(body) : null;
@@ -68,4 +69,10 @@ async function getBlastRadius(repoId, filePath) {
   return res.data;
 }
 
-module.exports = { analyze, getStats, generateFix, getBlastRadius };
+async function backfill(payload) {
+  const res = await request('POST', '/api/v1/backfill', payload);
+  if (res.status === 429) throw new Error('Rate limit exceeded');
+  return res.data;
+}
+
+module.exports = { analyze, getStats, generateFix, getBlastRadius, backfill };
