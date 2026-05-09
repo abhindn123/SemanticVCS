@@ -113,15 +113,5 @@ svcs backfill
 
 ---
 
-## 🤝 Team JUGAADU
-Built with ❤️ for **HACK-O-LUTION 2K26**.
-
-* **Kripasindhu Ghosh** — Lead, Backend & Architecture
-* **Piuli Biswas** — VS Code Extension & UI
-* **Amrit Kar** — ML Pipeline & Embeddings
-* **Abhinandan Ghosh** — Infrastructure & Testing
-
----
-
 ## 📄 License
 MIT License.
